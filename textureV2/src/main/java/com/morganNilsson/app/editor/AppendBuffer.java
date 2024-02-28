@@ -1,27 +1,18 @@
 package com.morganNilsson.app.editor;
 
 public class AppendBuffer {
-    char[] b;
-    int len;
+    String buffer;
 
-    void abAppend(struct AppendBuffer *ab, const char *s, int len){
+    static public void append(AppendBuffer ab, final String s){
         // append  to the appendBuffer 
-        // give more memory to the information field of the struct
-        char* new = realloc(ab->b, ab->len + len);
-    
-        // error check
-        if (new == NULL){
-            return;
-        }
-        // copy the bytes of s to the end of the new data structure
-        memcpy(&new[ab->len], s, len);
-        // assign to the old appendBuffer struct the new values with the included information
-        ab->b = new;
-        ab->len += len;
+        this.buffer += s;
     }
     
-    void abFree(struct AppendBuffer *ab){
-        // free the data struct
-        free(ab->b);
+    static public void free(AppendBuffer ab){
+        ab.buffer = "";
+    }
+
+    static public void free(){
+        this.buffer = "";
     }
 }

@@ -15,7 +15,7 @@ public class EditorConfig {
         // rows and columns of the terminal
         int screenRows, screenColumns;
         int displayLength;
-        EditorRow[] row;
+        EditorRow row;
         char[] fileName;
         EditorSyntax[] syntax;
         char[] statusMessage = new char[80];

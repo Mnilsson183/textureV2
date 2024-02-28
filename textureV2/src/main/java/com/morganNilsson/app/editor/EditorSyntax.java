@@ -1,6 +1,7 @@
 package com.morganNilsson.app.editor;
 
 public class EditorSyntax {
+    
     char[] filetype;
     char[][] fileMatch;
     char[][] keywords;
@@ -8,6 +9,7 @@ public class EditorSyntax {
     char[] multiline_comment_start;
     char[] multiline_comment_end;
     int flags;
+
     public void editorUpdateSyntax(EditorRow[] row){
         row.highLight = realloc(row.highLight, row.renderSize);
         memset(row.highLight, HL_NORMAL, row.renderSize);

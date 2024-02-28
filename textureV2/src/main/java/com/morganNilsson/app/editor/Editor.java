@@ -2,35 +2,42 @@ package com.morganNilsson.app.editor;
 
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
-
 import com.morganNilsson.app.State;
 import com.morganNilsson.app.terminal.TerminalMethods;
 
-
 public class Editor {
 
-    public Editor(){
-        // cursor positions
-        E.cx = 0;
-        E.cy = 0;
-        E.rx = 0;
-        E.rowOffset = 0;
-        E.columnOffset = 0;
-        E.displayLength = 0;
-        E.dirty = 0;
-        E.row = NULL;
-        E.fileName = NULL;
-        E.statusMessage[0] = '\0';
-        E.statusMessage_time = 0;
-        E.syntax = NULL;
+    public static int cx;
+    public static int cy;
+    public static int rx;
+    public static int rowOffset;
+    public static int columnOffset;
+    public static int displayLength;
+    public static int dirty;
+    public static EditorRow row = null;
+    public static String fileName = null;
+    public static char[] statusMessage[0] = '\u0000';
+    public static statusMessage_time;
+    public static syntax = null;
 
-        if (getWindowSize(&E.screenRows, &E.screenColumns) == -1){
-            terminate("getWindowSize");
+    public static void initEditor(){
+        // cursor positions
+        cx = 0;
+        cy = 0;
+        rx = 0;
+        rowOffset = 0;
+        columnOffset = 0;
+        displayLength = 0;
+        dirty = 0;
+        statusMessage_time = 0;
+
+        if (getWindowSize(&screenRows, &screenColumns) == -1){
+            TerminalMethods.terminate("getWindowSize");
         }
-        E.screenRows = E.screenRows - 2;
+        screenRows = screenRows - 2;
     }
 
-    enum editorKey{
+    enum keys{
         BACKSPACE = 127,
         ARROW_LEFT = 1000,
         ARROW_RIGHT,
@@ -43,7 +50,7 @@ public class Editor {
         PAGE_DOWN,
     };
 
-    enum editorHighlight{
+    enum highlight{
         HL_NORMAL = 0,
         HL_COMMENT,
         HL_MULTIPLE_LINE_COMMENT,
@@ -83,7 +90,7 @@ public class Editor {
         }
     }
 
-    static int readKey(){
+    public static int readKey(){
         int nread;
         char c;
         // read each key press
@@ -151,7 +158,7 @@ public class Editor {
         }
     }
 
-    int getCursorPosition(int[] rows, int[] columns){
+    public static int getCursorPosition(int[] rows, int[] columns){
         // man read to get the cursor position
         char[] buf = new char[32];
         int i = 0;
@@ -182,19 +189,19 @@ public class Editor {
         return 0; 
     }
 
-    void editorUpdateSyntax(EditorRow *row){
-        row->highLight = realloc(row->highLight, row->renderSize);
-        memset(row->highLight, HL_NORMAL, row->renderSize);
+    public static void updateSyntax(EditorRow row){
+        row.highLight = realloc(row.highLight, row.renderSize);
+        memset(row.highLight, HL_NORMAL, row.renderSize);
     
-        if(E.syntax == NULL){
+        if(syntax == NULL){
             return;
         }
     
-        char **keywords = E.syntax->keywords;
+        char[][] keywords = syntax.keywords;
     
-        char *singleLightCommentStart = E.syntax->singleline_comment_start;
-        char *multilineCommentStart = E.syntax->multiline_comment_start;
-        char *multilineCommentEnd = E.syntax->multiline_comment_end;
+        char[] singleLightCommentStart = syntax.singleline_comment_start;
+        char[] multilineCommentStart = syntax.multiline_comment_start;
+        char[] multilineCommentEnd = syntax.multiline_comment_end;
     
         int singleLightCommentStartLength = singleLightCommentStart ? strlen(singleLightCommentStart): 0;
         int multilineCommentStartLength = multilineCommentStart ? strlen(multilineCommentStart) : 0;
@@ -206,23 +213,23 @@ public class Editor {
         int in_comment = 0;
     
         int i = 0;
-        while (i < row->renderSize){
-            char c = row->render[i];
-            unsigned char prevHighlight = (i > 0) ? row->highLight[i - 1] : HL_NORMAL;
+        while (i < row.renderSize){
+            char c = row.render[i];
+            char prevHighlight = (i > 0) ? row.highLight[i - 1] : HL_NORMAL;
     
     
             if(singleLightCommentStartLength && !in_string){
-                if(!strncmp(&row->render[i], singleLightCommentStart, singleLightCommentStartLength)){
-                    memset(&row->highLight[i], HL_COMMENT, row->renderSize - i);
+                if(!strncmp(&row.render[i], singleLightCommentStart, singleLightCommentStartLength)){
+                    memset(&row.highLight[i], HL_COMMENT, row.renderSize - i);
                     break;
                 }
             }
     
             if(multilineCommentStartLength && multilineCommentEndLength && !in_string){
                 if(in_comment){
-                    row->highLight[i] = HL_MULTIPLE_LINE_COMMENT;
-                    if(!strncmp(&row->render[i], multilineCommentStart, multilineCommentStartLength)){
-                        memset(&row->highLight[i], HL_MULTIPLE_LINE_COMMENT, multilineCommentStartLength);
+                    row.highLight[i] = HL_MULTIPLE_LINE_COMMENT;
+                    if(!strncmp(&row.render[i], multilineCommentStart, multilineCommentStartLength)){
+                        memset(&row.highLight[i], HL_MULTIPLE_LINE_COMMENT, multilineCommentStartLength);
                         i += 2;
                         in_comment = 0;
                         prevSeparator = 1;
@@ -231,24 +238,24 @@ public class Editor {
                         i++;
                         continue;
                     }
-                } else if(!strncmp(&row->render[i], multilineCommentStart, multilineCommentStartLength)){
-                        memset(&row->highLight[i], HL_MULTIPLE_LINE_COMMENT, multilineCommentStartLength);
+                } else if(!strncmp(&row.render[i], multilineCommentStart, multilineCommentStartLength)){
+                        memset(&row.highLight[i], HL_MULTIPLE_LINE_COMMENT, multilineCommentStartLength);
                         i += multilineCommentStartLength;
                         in_comment = 1;
                         continue;
                 }
             }
     
-            if(E.syntax->flags & HL_HIGHLIGHT_STRINGS){
+            if(syntax.flags & HL_HIGHLIGHT_STRINGS){
                 if(in_string){
-                    if(c == '\\' && i + 1 < row->renderSize){
-                        row->highLight[i + 1] = HL_STRING;
+                    if(c == '\\' && i + 1 < row.renderSize){
+                        row.highLight[i + 1] = HL_STRING;
                         i += 2;
                         continue;
                     }
-                    row->highLight[i] = HL_STRING;
-                    if(c == '\\' && i + 1 < row->renderSize){
-                        row->highLight[i + 1] = HL_STRING;
+                    row.highLight[i] = HL_STRING;
+                    if(c == '\\' && i + 1 < row.renderSize){
+                        row.highLight[i + 1] = HL_STRING;
                         i += 2;
                         continue;
                     }
@@ -261,17 +268,17 @@ public class Editor {
                 } else{
                     if(c == '"' || c == '\''){
                         in_string = c;
-                        row->highLight[i] = HL_STRING;
+                        row.highLight[i] = HL_STRING;
                         i++;
                         continue;
                     }
                 }
             }
     
-            if(E.syntax->flags & HL_HIGHLIGHT_NUMBERS){
+            if(syntax.flags & HL_HIGHLIGHT_NUMBERS){
                 if((isdigit(c) && (prevSeparator || prevHighlight == HL_NUMBER)) || 
                 (c =='.' && prevHighlight == HL_NUMBER)){
-                    row->highLight[i] = HL_NUMBER;
+                    row.highLight[i] = HL_NUMBER;
                     i++;
                     prevSeparator = 0;
                     continue;
@@ -284,9 +291,9 @@ public class Editor {
                     int keyword2 = keywords[j][keywordLength - 1] == '|';
                     if(keyword2) keywordLength--;
     
-                    if(!strncmp(&row->render[i], keywords[j], keywordLength) &&
-                        isSeparator(row->render[i + keywordLength])){
-                            memset(&row->highLight[i], keyword2 ? HL_KEYWORD2: HL_KEYWORD1, keywordLength);
+                    if(!strncmp(&row.render[i], keywords[j], keywordLength) &&
+                        isSeparator(row.render[i + keywordLength])){
+                            memset(&row.highLight[i], keyword2 ? HL_KEYWORD2: HL_KEYWORD1, keywordLength);
                             i+=keywordLength;
                             break;
                     }
@@ -301,7 +308,7 @@ public class Editor {
         }
     }
     
-    int editorSyntaxToColor(int highLight){
+    public static int syntaxToColor(int highLight){
         switch (highLight)
         {
             case HL_COMMENT:
@@ -315,26 +322,26 @@ public class Editor {
         }
     }
     
-    void editorSelectSyntaxHighlight(void){
-        E.syntax = NULL;
-        if(E.fileName == NULL){
+    public static void selectSyntaxHighlight(){
+        syntax = NULL;
+        if(fileName == NULL){
             return;
         }
     
-        char *extension = strrchr(E.fileName, '.');
+        char *extension = strrchr(fileName, '.');
     
         for(unsigned int j = 0; j < HighLightDataBase_ENTRIES; j++){
             struct EditorSyntax *s = &HighLightDataBase[j];
             unsigned int i = 0;
-            while(s->fileMatch[i]){
-                int is_extension = (s->fileMatch[i][0] == '0');
-                if((is_extension && extension && !strcmp(extension, s->fileMatch[i])) ||
-                    (!is_extension && strstr(E.fileName, s->fileMatch[i]))){
-                        E.syntax = s;
+            while(s.fileMatch[i]){
+                int is_extension = (s.fileMatch[i][0] == '0');
+                if((is_extension && extension && !strcmp(extension, s.fileMatch[i])) ||
+                    (!is_extension && strstr(fileName, s.fileMatch[i]))){
+                        syntax = s;
     
                         int fileRow;
-                        for(fileRow = 0; fileRow < E.displayLength; fileRow++){
-                            editorUpdateSyntax(&E.row[fileRow]);
+                        for(fileRow = 0; fileRow < displayLength; fileRow++){
+                            editorUpdateSyntax(&row[fileRow]);
                         }
     
                         return;
@@ -346,11 +353,11 @@ public class Editor {
     
     /* row operations */
     
-    int editorRowCxToRx(EditorRow *row, int cx){
+    public static int rowCxToRx(EditorRow row, int cx){
         int rx = 0;
         int j;
         for(j = 0; j < cx; j++){
-            if (row->chars[j] == '\t'){
+            if (row.chars[j] == '\t'){
                 rx += (TEXTURE_TAB_STOP - 1) - (rx % TEXTURE_TAB_STOP);
             }
             rx++;
@@ -358,11 +365,11 @@ public class Editor {
         return rx;
     }
     
-    int editorRowRxToCx(EditorRow *row, int rx){
+    public static int rowRxToCx(EditorRow row, int rx){
         int cur_rx = 0;
         int cx;
-        for(cx = 0; cx < row->size; cx++){
-            if (row->chars[cx] == '\t'){
+        for(cx = 0; cx < row.size; cx++){
+            if (row.chars[cx] == '\t'){
                 cur_rx += (TEXTURE_TAB_STOP - 1) - (cur_rx % TEXTURE_TAB_STOP);
             }
             cur_rx++;
@@ -373,176 +380,176 @@ public class Editor {
         return cx;
     }
     
-    void editorUpdateRow(EditorRow *row){
+    public static void updateRow(EditorRow row){
         int tabs = 0;
         int j;
-        for (j = 0; j < row->size; j++){
-            if (row->chars[j] == '\t'){
+        for (j = 0; j < row.size; j++){
+            if (row.chars[j] == '\t'){
                 tabs++;
             }
         }
-        free(row->render);
-        row->render = malloc(row->size + ( tabs * (TEXTURE_TAB_STOP - 1)) + 1);
+        free(row.render);
+        row.render = malloc(row.size + ( tabs * (TEXTURE_TAB_STOP - 1)) + 1);
     
         int tempLength = 0;
-        for (j = 0; j < row->size; j++){
-            if (row->chars[j] == '\t'){
-                row->render[tempLength++] = ' ';
+        for (j = 0; j < row.size; j++){
+            if (row.chars[j] == '\t'){
+                row.render[tempLength++] = ' ';
                 while (tempLength % TEXTURE_TAB_STOP != 0){
-                    row->render[tempLength++] = ' ';
+                    row.render[tempLength++] = ' ';
                 }
             } else{
-                row->render[tempLength++] = row->chars[j];
+                row.render[tempLength++] = row.chars[j];
             }
         }
-        row->render[tempLength] = '\0';
-        row->renderSize = tempLength;
+        row.render[tempLength] = '\0';
+        row.renderSize = tempLength;
     
-        editorUpdateSyntax(row);
+        updateSyntax(row);
     }
     
-    void editorInsertRow(int at, char* s, size_t length){
-        if(at < 0 || at > E.displayLength){
+    public static void insertRow(int at, String s, size_t length){
+        if(at < 0 || at > displayLength){
             return;
         }
     
-        E.row = realloc(E.row, sizeof(EditorRow) * (E.displayLength + 1));
-        memmove(&E.row[at + 1], &E.row[at], sizeof(EditorRow) * (E.displayLength - at));
+        row = realloc(row, sizeof(EditorRow) * (displayLength + 1));
+        memmove(&row[at + 1], &row[at], sizeof(EditorRow) * (displayLength - at));
     
         // add a row to display
-        E.row[at].size = length;
-        E.row[at].chars = malloc(length + 1);
-        memcpy(E.row[at].chars, s, length);
-        E.row[at].chars[length] = '\0';
+        row[at].size = length;
+        row[at].chars = malloc(length + 1);
+        memcpy(row[at].chars, s, length);
+        row[at].chars[length] = '\0';
     
-        E.row[at].renderSize = 0;
-        E.row[at].render = NULL;
-        E.row[at].highLight = NULL;
-        editorUpdateRow(&E.row[at]);
+        row[at].renderSize = 0;
+        row[at].render = NULL;
+        row[at].highLight = NULL;
+        editorUpdateRow(&row[at]);
     
-        E.displayLength++;
-        E.dirty++;
+        displayLength++;
+        dirty++;
     }
     
-    void editorFreeRow(EditorRow *row){
-        free(row->render);
-        free(row->chars);
-        free(row->highLight);
+    public static void freeRow(EditorRow row){
+        free(row.render);
+        free(row.chars);
+        free(row.highLight);
     }
     
-    void editorDeleteRow(int at){
-        if(at < 0 || at >= E.displayLength){
+    public static void deleteRow(int at){
+        if(at < 0 || at >= displayLength){
             return;
         }
-        editorFreeRow(&E.row[at]);
-        memmove(&E.row[at], &E.row[at + 1], sizeof(EditorRow) * (E.displayLength - at - 1));
-        E.displayLength--;
-        E.dirty++;
+        editorFreeRow(&row[at]);
+        memmove(&row[at], &row[at + 1], sizeof(EditorRow) * (displayLength - at - 1));
+        displayLength--;
+        dirty++;
     }
     
-    void editorRowInsertChar(EditorRow *row, int at, int c){
-        if (at < 0 || at > row->size){ 
-            at = row->size;
+    public static void rowInsertChar(EditorRow *row, int at, int c){
+        if (at < 0 || at > row.size){ 
+            at = row.size;
         }
-        row->chars = realloc(row->chars, row->size + 2);
-            memmove(&row->chars[at + 1], &row->chars[at], row->size - at + 1);
-            row->size++;
-            row->chars[at] = c;
+        row.chars = realloc(row.chars, row.size + 2);
+            memmove(&row.chars[at + 1], &row.chars[at], row.size - at + 1);
+            row.size++;
+            row.chars[at] = c;
             editorUpdateRow(row);
-            E.dirty++;
+            dirty++;
     }
     
-    void editorRowAppendString(EditorRow *row, char *s, size_t length){
-        row->chars = realloc(row->chars, row->size + length + 1);
-        memcpy(&row->chars[row->size], s, length);
-        row->size += length;
-        row->chars[row->size] = '\0';
+    public static void rowAppendString(EditorRow row, String s){
+        row.chars = realloc(row.chars, row.size + s.length() + 1);
+        memcpy(&row.chars[row.size], s, s.length());
+        row.size += s.length();
+        row.chars[row.size] = '\0';
         editorUpdateRow(row);
-        E.dirty++;
+        dirty++;
     }
     
-    void editorRowDeleteChar(EditorRow *row, int at){
-        if (at < 0 || at >= row->size){
+    public static void rowDeleteChar(EditorRow row, int at){
+        if (at < 0 || at >= row.size){
             return;
         }
-        memmove(&row->chars[at], &row->chars[at + 1], row->size - at);
-        row->size--;
+        memmove(&row.chars[at], &row.chars[at + 1], row.size - at);
+        row.size--;
         editorUpdateRow(row);
-        E.dirty++;
+        dirty++;
     }
     
     /* Editor Functions */
-    void editorInsertChar(int c){
-        if (E.cy == E.displayLength){
-            editorInsertRow(E.displayLength, "", 0);
+    public static void insertChar(int c){
+        if (cy == displayLength){
+            editorInsertRow(displayLength, "", 0);
         }
-        editorRowInsertChar(&E.row[E.cy], E.cx, c);
-        E.cx++;
+        editorRowInsertChar(&row[cy], cx, c);
+        cx++;
     }
     
-    void editorInsertNewLine(){
-        if(E.cx == 0){
-            editorInsertRow(E.cy, "", 0);
+    public static void insertNewLine(){
+        if(cx == 0){
+            editorInsertRow(cy, "", 0);
         } else{
-            EditorRow *row = &E.row[E.cy];
-            editorInsertRow(E.cy + 1, &row->chars[E.cx], row->size - E.cx);
-            row = &E.row[E.cy];
-            row->size = E.cx;
-            row->chars[row->size] = '\0';
+            EditorRow row = &row[cy];
+            editorInsertRow(cy + 1, &row.chars[cx], row.size - cx);
+            row = &row[cy];
+            row.size = cx;
+            row.chars[row.size] = '\0';
             editorUpdateRow(row);
         }
-        E.cy++;
-        E.cx = 0;
+        cy++;
+        cx = 0;
     }
     
     
-    void editorDeleteChar(){
-        if(E.cy == E.displayLength){
+    public static void deleteChar(){
+        if(cy == displayLength){
             return;
         }
-        if(E.cx == 0 && E.cy == 0){
+        if(cx == 0 && cy == 0){
             return;
         }
     
-        EditorRow *row = &E.row[E.cy];
+        EditorRow row = &row[cy];
     
-        if(E.cx > 0){
-            editorRowDeleteChar(row, E.cx - 1);
-            E.cx--;
+        if(cx > 0){
+            editorRowDeleteChar(row, cx - 1);
+            cx--;
         } else{
-            E.cx = E.row[E.cy - 1].size;
-            editorRowAppendString(&E.row[E.cy - 1], row->chars, row->size);
-            editorDeleteRow(E.cy);
-            E.cy--;
+            cx = row[cy - 1].size;
+            editorRowAppendString(&row[cy - 1], row.chars, row.size);
+            editorDeleteRow(cy);
+            cy--;
         }
     }
     
     
     /* file i/o */
     
-    char* editorRowsToString(int* bufferlength){
+    public static String rowsToString(int[] bufferlength){
         int totalLength = 0;
         int j;
-        for(j = 0; j < E.displayLength; j++){
-            totalLength += E.row[j].size + 1;
+        for(j = 0; j < displayLength; j++){
+            totalLength += row[j].size + 1;
         }
         *bufferlength = totalLength;
     
         char *buf = malloc(totalLength);
         char *p = buf;
-        for(j = 0; j < E.displayLength; j++){
-            memcpy(p, E.row[j].chars, E.row[j].size);
-            p += E.row[j].size;
+        for(j = 0; j < displayLength; j++){
+            memcpy(p, row[j].chars, row[j].size);
+            p += row[j].size;
             *p = '\n';
             p++;
         }
         return buf;
     }
     
-    void editorOpen(char* filename){
+    public static void open(String filename){
         // open a file given a file path
-        free(E.fileName);
-        E.fileName = strdup(filename);
+        free(fileName);
+        fileName = strdup(filename);
     
         editorSelectSyntaxHighlight();
     
@@ -550,9 +557,9 @@ public class Editor {
         if (!filePath){
             terminate("fopen");
         }
-        char *line = NULL;
+        String line = NULL;
         size_t lineCap = 0;
-        ssize_t lineLength;
+        int lineLength = line.length();
         // read each line from this file into the row editorRow data struct chars feild
         while((lineLength = getline(&line, &lineCap, filePath)) != -1){
             // no need to read the carrige return and new line character
@@ -560,18 +567,18 @@ public class Editor {
                                         (line[lineLength - 1] == '\n')))
             {
                 lineLength--;
-                editorInsertRow(E.displayLength, line, lineLength);
+                editorInsertRow(displayLength, line, lineLength);
             }
         }
         free(line);
         fclose(filePath);
-        E.dirty = 0;
+        dirty = 0;
     }
     
-    void editorSave(){
-        if(E.fileName == NULL){
-            E.fileName = editorPrompt("Save as (Esc to cancel): %s", NULL);
-            if(E.fileName == NULL){
+    public static void save(){
+        if(fileName == NULL){
+            fileName = editorPrompt("Save as (Esc to cancel): %s", NULL);
+            if(fileName == NULL){
                 editorSetStatusMessage("Save aborted");
                 return;
             }
@@ -579,14 +586,14 @@ public class Editor {
         }
     
         int length;
-        char *buffer = editorRowsToString(&length);
-        int fd = open(E.fileName, O_RDWR | O_CREAT, 0644);
+        String buffer = editorRowsToString(&length);
+        int fd = open(fileName, O_RDWR | O_CREAT, 0644);
         if (fd != -1){
             if(ftruncate(fd, length) != -1){
                 if(write(fd, buffer, length) == length){
                     close(fd);
                     free(buffer);
-                    E.dirty = 0;
+                    dirty = 0;
                     editorSetStatusMessage("%d bytes written to disk", length);
                     return;
                 }
@@ -594,11 +601,11 @@ public class Editor {
             close(fd);
         }
         free(buffer);
-        editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno));
+        editorSetStatusMessage("Can't save! I/O error");
     }
     
     /* find */
-    void editorFindCallback(char *query, int key){
+    public static void findCallback(String query, int key){
         static int last_match = -1;
         static int direction = 1;
     
@@ -606,12 +613,12 @@ public class Editor {
         static char *saved_highLight = NULL;
     
         if(saved_highLight){
-            memcpy(E.row[saved_highLight_line].highLight, saved_highLight, E.row[saved_highLight_line].renderSize);
+            memcpy(row[saved_highLight_line].highLight, saved_highLight, row[saved_highLight_line].renderSize);
             free(saved_highLight);
             saved_highLight = NULL;
         }
     
-        if(key == '\r' || key == '\x1b'){
+        if(key == '\r' || key == '\u001b'){
             last_match = -1;
             direction = 1;
             return;
@@ -629,65 +636,65 @@ public class Editor {
         }
         int current = last_match;
         int i;
-        for(i = 0; i < E.displayLength; i++){
+        for(i = 0; i < displayLength; i++){
             current += direction;
             if(current == -1){
-                current = E.displayLength - 1;
-            } else if(current == E.displayLength){
+                current = displayLength - 1;
+            } else if(current == displayLength){
                 current = 0;
             }
     
-            EditorRow *row = &E.row[current];
-            char *match = strstr(row->render, query);
+            EditorRow row = &row[current];
+            String match = strstr(row.render, query);
             if(match){
                 last_match = current;
-                E.cy = current;
-                E.cx = editorRowRxToCx(row, match - row->render);
-                E.rowOffset = E.displayLength;
+                cy = current;
+                cx = editorRowRxToCx(row, match - row.render);
+                rowOffset = displayLength;
     
                 saved_highLight_line = current;
-                saved_highLight = malloc(row->size);
-                memcpy(saved_highLight, row->highLight, row->renderSize);
-                memset(&row->highLight[match - row->render], HL_MATCH, strlen(query));
+                saved_highLight = malloc(row.size);
+                memcpy(saved_highLight, row.highLight, row.renderSize);
+                memset(&row.highLight[match - row.render], HL_MATCH, strlen(query));
                 break;
             }
         }
     
     }
     
-    void editorFind(){
-        int saved_cx = E.cx;
-        int saved_cy = E.cy;
-        int saved_columnOffset = E.columnOffset;
-        int saved_rowOffset = E.rowOffset;
+    public static void find(){
+        int saved_cx = cx;
+        int saved_cy = cy;
+        int saved_columnOffset = columnOffset;
+        int saved_rowOffset = rowOffset;
     
-        char* query = editorPrompt("Search: %s (ESC/Arrows/Enter): ", editorFindCallback);
+        String query = editorPrompt("Search: %s (ESC/Arrows/Enter): ", editorFindCallback);
         if(query){
             free(query);
         } else {
-            E.cx = saved_cx;
-            E.cy = saved_cy;
-            E.columnOffset = saved_columnOffset;
-            E.rowOffset = saved_rowOffset;
+            cx = saved_cx;
+            cy = saved_cy;
+            columnOffset = saved_columnOffset;
+            rowOffset = saved_rowOffset;
         }
     }
-    void editorDrawRows(struct AppendBuffer *ab){
+    public static void drawRows(struct AppendBuffer *ab){
         // draw stuff
         int row;
-        for(row = 0; row < E.screenRows; row++){
-            int fileRow = row + E.rowOffset;
-            if (fileRow >= E.displayLength){
+        for(row = 0; row < screenRows; row++){
+            int fileRow = row + rowOffset;
+            if (fileRow >= displayLength){
                     // put welcome message 1/3 down the screen
-                    if ((E.displayLength == 0) && (row == E.screenRows / 3)){
-                        char welcome[80];
+                    if ((displayLength == 0) && (row == screenRows / 3)){
+                        char[] welcome = new char[80];
                         int welcomeLength = snprintf(welcome, sizeof(welcome),
                         "Texture Editor -- Version %s", TEXTURE_VERSION);
                         // if screen size is too small to fit the welcome message cut it off
-                        if (welcomeLength > E.screenColumns){
-                            welcomeLength = E.screenColumns;
+                        if (welcomeLength > screenColumns){
+                            welcomeLength = screenColumns;
                         }
                         // put the message in the middle of the screen
-                        int padding = (E.screenColumns - welcomeLength) / 2;
+                        int padding = (screenColumns - welcomeLength) / 2;
                         if (padding){
                             abAppend(ab, "~", 1);
                             padding--;
@@ -701,25 +708,25 @@ public class Editor {
                     }
                 } else {
                     // else write the val in the column
-                    int length = E.row[fileRow].renderSize - E.columnOffset;
+                    int length = row[fileRow].renderSize - columnOffset;
                     if (length < 0){
                         length = 0;
                     }
-                    if (length > E.screenColumns){
-                        length = E.screenColumns;
+                    if (length > screenColumns){
+                        length = screenColumns;
                     }
-                    char *c = &E.row[fileRow].render[E.columnOffset];
-                    unsigned char *highLight = &E.row[fileRow].highLight[E.columnOffset];
+                    String c = &row[fileRow].render[columnOffset];
+                    unsigned char *highLight = &row[fileRow].highLight[columnOffset];
                     int current_color = -1;
                     int j;
                     for(j = 0; j < length; j++){
                         if(iscntrl(c[j])){
                             char sym = (c[j] <= 26) ? '@' + c[j] : '?';
-                            abAppend(ab, "\x1b[7m", 4);
-                            abAppend(ab, &sym, 1);
-                            abAppend(ab, "\x1b[m", 3);
+                            ab.append(ab, "\x1b[7m");
+                            ab.append(ab, &sym);
+                            ab.append(ab, "\x1b[m");
                             if(current_color != -1){
-                                char buf[16];
+                                char[] buf = new char[16];
                                 int clen = snprintf(buf, sizeof(buf), "\x1b[%dm", current_color);
                                 abAppend(ab, buf, clen);
                             }
@@ -747,5 +754,132 @@ public class Editor {
                 // print to the next line
                 abAppend(ab, "\r\n", 2);
         }
+    }
+    public static void setStatusMessage(String fmt){
+        va_list ap;
+        va_start (ap, fmt);
+        vsnprintf(E.statusMessage, sizeof(E.statusMessage), fmt, ap);
+        va_end(ap);
+        E.statusMessage_time = time(NULL);
+    }
+
+    public static void refreshScreen(){
+        editorScroll();
+    
+        AppendBuffer ab = APPEND_INIT;
+    
+        // hide the cursor
+        abAppend(&ab, "\x1b[?25l", 6);
+        // move the cursor to the 1,1 position in the terminal
+        abAppend(&ab, "\x1b[H", 3);
+    
+        editorDrawRows(&ab);
+        editorDrawStatusBar(&ab);
+        editorDrawMessageBar(&ab);
+    
+        char buf[32];
+        snprintf(buf, sizeof(buf), "\x1b[%d;%dH",   (E.cy - E.rowOffset) + 1, 
+                                                    (E.rx - E.columnOffset) + 1);
+        abAppend(&ab, buf, strlen(buf));
+    
+        // show cursor again
+        abAppend(&ab, "\x1b[?25h", 6);
+    
+        write(STDOUT_FILENO, ab.b, ab.len);
+        abFree(&ab);
+    }
+
+    void processKeyPress(){
+        static int quit_times = TEXTURE_QUIT_TIMES;
+    
+        int c = editorReadKey();
+    
+        switch (c){
+            case '\r':
+                editorInsertNewLine();
+                break;
+    
+            // exit case
+            case CTRL_KEY('q'):
+                if(E.dirty && quit_times > 0){
+                    editorSetStatusMessage("WARNING!! file has unsaved changes. "
+                    "Press Ctrl-Q %d more times to quit", quit_times);
+                    quit_times--;
+                    return;
+                }
+                // write the 4 byte erase in display to the screen
+                write(STDOUT_FILENO, "\x1b[2J", 4);
+                // move the cursor to the 1,1 position in the terminal
+                write(STDOUT_FILENO, "\x1b[H", 3);
+                exit(0);
+                break;
+    
+            case CTRL_KEY('s'):
+                editorSave();
+                break;
+            // home key sets the x position to the home 
+            case HOME_KEY:
+                E.cx = 0;
+                break;
+            // end key sets the x position to the column before the end of the screen
+            case END_KEY:
+                if (E.cy < E.displayLength){
+                    E.cx = E.row[E.cy].size;
+                }
+                break;
+    
+            case CTRL_KEY('f'):
+                if(E.cy < E.displayLength){
+                    editorFind();
+                }
+                break;
+    
+            case BACKSPACE:
+            case CTRL_KEY('h'):
+            case DEL_KEY:
+                if(c == DEL_KEY){
+                    editorMoveCursor(ARROW_RIGHT);
+                }
+                editorDeleteChar();
+                break;
+    
+    
+            // send the cursor to the top of the column in cases up and down
+            case PAGE_UP:
+            case PAGE_DOWN:
+                {
+                    if (c == PAGE_UP){
+                        E.cy = E.rowOffset;
+                    } else if(c == PAGE_DOWN){
+                        E.cy = E.rowOffset + E.screenRows - 1;
+                    }
+    
+                    if (E.cy > E.displayLength){
+                        E.cy = E.displayLength;
+                    }
+    
+                    int times = E.screenRows;
+                    while(times--){
+                        editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
+                    }
+                }
+                break;
+    
+            case ARROW_UP:
+            case ARROW_DOWN:
+            case ARROW_LEFT:
+            case ARROW_RIGHT:
+                editorMoveCursor(c);
+                break;
+    
+            case CTRL_KEY('l'):
+            case '\u001b':
+                break;
+    
+            default:
+                editorInsertChar(c);
+                break;
+        }
+        quit_times = TEXTURE_QUIT_TIMES;
     }
 }
