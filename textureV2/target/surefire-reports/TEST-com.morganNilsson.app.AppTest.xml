@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report.xsd" name="com.morganNilsson.app.AppTest" time="0.155" tests="1" errors="0" skipped="0" failures="0">
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report.xsd" name="com.morganNilsson.app.AppTest" time="0.07" tests="1" errors="0" skipped="0" failures="0">
   <properties>
     <property name="java.specification.version" value="17"/>
     <property name="sun.jnu.encoding" value="UTF-8"/>
@@ -12,7 +12,7 @@
     <property name="sun.java.launcher" value="SUN_STANDARD"/>
     <property name="user.country" value="US"/>
     <property name="sun.boot.library.path" value="/usr/lib/jvm/java-17-openjdk-amd64/lib"/>
-    <property name="sun.java.command" value="/home/morgan/Desktop/textureV2/textureV2/target/surefire/surefirebooter14718426193938774420.jar /home/morgan/Desktop/textureV2/textureV2/target/surefire 2024-02-28T09-33-56_210-jvmRun1 surefire7197656473960811580tmp surefire_04782209872241303512tmp"/>
+    <property name="sun.java.command" value="/home/morgan/Desktop/textureV2/textureV2/target/surefire/surefirebooter11928612347613224327.jar /home/morgan/Desktop/textureV2/textureV2/target/surefire 2024-02-28T09-59-06_351-jvmRun1 surefire97261026488041022tmp surefire_012799009703463950407tmp"/>
     <property name="jdk.debug" value="release"/>
     <property name="surefire.test.class.path" value="/home/morgan/Desktop/textureV2/textureV2/target/test-classes:/home/morgan/Desktop/textureV2/textureV2/target/classes:/home/morgan/.m2/repository/junit/junit/4.11/junit-4.11.jar:/home/morgan/.m2/repository/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar:/home/morgan/.m2/repository/org/jline/jline/3.25.1/jline-3.25.1.jar:"/>
     <property name="sun.cpu.endian" value="little"/>
@@ -27,7 +27,7 @@
     <property name="line.separator" value="&#10;"/>
     <property name="java.vm.specification.vendor" value="Oracle Corporation"/>
     <property name="java.specification.name" value="Java Platform API Specification"/>
-    <property name="surefire.real.class.path" value="/home/morgan/Desktop/textureV2/textureV2/target/surefire/surefirebooter14718426193938774420.jar"/>
+    <property name="surefire.real.class.path" value="/home/morgan/Desktop/textureV2/textureV2/target/surefire/surefirebooter11928612347613224327.jar"/>
     <property name="sun.management.compiler" value="HotSpot 64-Bit Tiered Compilers"/>
     <property name="java.runtime.version" value="17.0.10+7-Debian-1deb12u1"/>
     <property name="user.name" value="morgan"/>
@@ -51,5 +51,5 @@
     <property name="sun.io.unicode.encoding" value="UnicodeLittle"/>
     <property name="java.class.version" value="61.0"/>
   </properties>
-  <testcase name="shouldAnswerWithTrue" classname="com.morganNilsson.app.AppTest" time="0.008"/>
+  <testcase name="shouldAnswerWithTrue" classname="com.morganNilsson.app.AppTest" time="0.004"/>
 </testsuite>
