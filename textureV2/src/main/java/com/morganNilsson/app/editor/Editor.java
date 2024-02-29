@@ -2,6 +2,7 @@ package com.morganNilsson.app.editor;
 
 import java.io.BufferedReader;
 import java.sql.Time;
+import java.util.Scanner;
 
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
@@ -27,9 +28,8 @@ public class Editor {
     public static final int TEXTURE_QUIT_TIMES = 3;
     public static final String TEXTURE_VERSION = "2.01";
     public static final STDIN_FILENO STDIN_FILENO = null;
-
-    #define HL_HIGHLIGHT_NUMBERS (1<<0)
-    #define HL_HIGHLIGHT_STRINGS (1<<1)
+    public static final int HL_HIGHLIGHT_NUMBERS = 1;
+    public static final int HL_HIGHLIGHT_STRINGS = 2;
 
     public static void initEditor(){
         // cursor positions
@@ -43,6 +43,7 @@ public class Editor {
         dirty = 0;
         statusMessage_time = null; // = 0
         STDIN_FILENO = new STDIN_FILENO();
+        EditorConfig.orig_terminal.getHeight()
 
         if (getWindowSize(EditorConfig.screenRows, EditorConfig.screenColumns) == -1){
             TerminalMethods.terminate("getWindowSize");
@@ -106,6 +107,8 @@ public class Editor {
         "void|",
     };
 
+    public static final int HighLightDataBase_ENTRIES (HighLightDataBase.length / HighLightDataBase[0].length)
+
     public static int CTRL_KEY(int key){
         return ((key) & 0x1f);
     }
@@ -132,6 +135,24 @@ public class Editor {
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(0);
+        }
+    }
+
+    int getWindowSize(int* rows, int* columns){
+        struct winsize ws;
+    
+        // easy way to do the getCursorPosition function
+        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0){
+            if (write(STDOUT_FILENO, "\x1b[999C\x1b[999B", 12) != 12){
+                return getCursorPosition(rows, columns);
+            }
+            // if the easy way fails use the man one
+            editorReadKey();
+            return -1;
+        } else{
+            *columns = ws.ws_col;
+            *rows = ws.ws_row;
+            return 0;
         }
     }
 
@@ -203,7 +224,7 @@ public class Editor {
         }
     }
 
-    public static int getCursorPosition(int[] rows, int[] columns){
+    public static int getCursorPosition(Integer[] rows, Integer[] columns){
         // man read to get the cursor position
         char[] buf = new char[32];
         int i = 0;
@@ -228,14 +249,21 @@ public class Editor {
         if (buf[0] != '\u001b' || buf[1] != '['){
             return -1;
         }
-        if (sscanf(buf[2],"%d;%d", rows, columns) != 2){
-            return -1;
+        String subString = buf.toString().substring(2);
+        Scanner scanner = new Scanner(subString).useDelimiter(";");
+        try {
+            rows[0] = scanner.nextInt();
+            columns[0] = scanner.nextInt();
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally{
+            scanner.close();
         }
         return 0; 
     }
 
     public static void updateSyntax(EditorRow row){
-        row.highLight = Highlight.HL_NORMAL.value;
+        row.highLight[0] = Highlight.HL_NORMAL.value;
     
         if(syntax == null){
             return;
@@ -252,18 +280,18 @@ public class Editor {
         int multilineCommentEndLength = multilineCommentEnd != null ? multilineCommentEnd.length : 0;
     
     
-        int prevSeparator = 1;
+        boolean prevSeparator = true;
         int in_string = 0;
         int in_comment = 0;
     
         int i = 0;
         while (i < row.renderSize){
-            char c = row.render[i];
-            char prevHighlight = (i > 0) ? row.highLight[i - 1] : Highlight.HL_NORMAL.value;
+            char c = row.render.charAt(i);
+            char prevHighlight = (char)((i > 0) ? row.highLight[i - 1] : Highlight.HL_NORMAL.value);
     
     
-            if(singleLightCommentStartLength && in_string != 0){
-                if(!row.render[i].equals(singleLightCommentStart)){
+            if(singleLightCommentStartLength != 0 && in_string != 0){
+                if(!row.render.charAt(i).equals(singleLightCommentStart)){
                     memset(row.highLight[i], Highlight.HL_COMMENT, row.renderSize - i);
                     break;
                 }
@@ -272,17 +300,17 @@ public class Editor {
             if(multilineCommentStartLength != 0 && multilineCommentEndLength != 0 && in_string != 0){
                 if(in_comment != 0){
                     row.highLight[i] = Highlight.HL_MULTIPLE_LINE_COMMENT.value;
-                    if(!row.render[i].equals(multilineCommentStart)){
+                    if(!row.render.charAt(i).equals(multilineCommentStart)){
                         memset(row.highLight[i], Highlight.HL_MULTIPLE_LINE_COMMENT.value, multilineCommentStartLength);
                         i += 2;
                         in_comment = 0;
-                        prevSeparator = 1;
+                        prevSeparator = true;
                         continue;
                     } else{
                         i++;
                         continue;
                     }
-                } else if(!row.render[i].equals(multilineCommentStart)){
+                } else if(!row.render.charAt(i).equals(multilineCommentStart)){
                         memset(row.highLight[i], Highlight.HL_MULTIPLE_LINE_COMMENT, multilineCommentStartLength);
                         i += multilineCommentStartLength;
                         in_comment = 1;
@@ -290,16 +318,16 @@ public class Editor {
                 }
             }
     
-            if(syntax.flags & Highlight.HL_HIGHLIGHT_STRINGS){
-                if(in_string){
+            if((syntax.flags & HL_HIGHLIGHT_STRINGS) != 0){
+                if(in_string != 0){
                     if(c == '\\' && i + 1 < row.renderSize){
-                        row.highLight[i + 1] = Highlight.HL_STRING;
+                        row.highLight[i + 1] = Highlight.HL_STRING.value;
                         i += 2;
                         continue;
                     }
-                    row.highLight[i] = Highlight.HL_STRING;
+                    row.highLight[i] = Highlight.HL_STRING.value;
                     if(c == '\\' && i + 1 < row.renderSize){
-                        row.highLight[i + 1] = Highlight.HL_STRING;
+                        row.highLight[i + 1] = Highlight.HL_STRING.value;
                         i += 2;
                         continue;
                     }
@@ -307,36 +335,36 @@ public class Editor {
                         in_string = 0;
                     }
                     i++;
-                    prevSeparator = 1;
+                    prevSeparator = true;
                     continue;
                 } else{
                     if(c == '"' || c == '\''){
                         in_string = c;
-                        row.highLight[i] = HL_STRING;
+                        row.highLight[i] = Highlight.HL_STRING.value;
                         i++;
                         continue;
                     }
                 }
             }
     
-            if(syntax.flags & HL_HIGHLIGHT_NUMBERS){
-                if((isdigit(c) && (prevSeparator || prevHighlight == Highlight.HL_NUMBER)) || 
-                    (c =='.' && prevHighlight == Highlight.HL_NUMBER)){
-                    row.highLight[i] = Highlight.HL_NUMBER;
+            if((syntax.flags & HL_HIGHLIGHT_NUMBERS) != 0){
+                if((Character.isDigit(c) && (prevSeparator || (int)prevHighlight == Highlight.HL_NUMBER.value)) || 
+                    (c =='.' && prevHighlight == Highlight.HL_NUMBER.value)){
+                    row.highLight[i] = Highlight.HL_NUMBER.value;
                     i++;
-                    prevSeparator = 0;
+                    prevSeparator = false;
                     continue;
                 }
             }
             if(prevSeparator){
                 int j;
-                for(j = 0; keywords[j]; j++){
-                    int keywordLength = strlen(keywords[j]);
+                for(j = 0; keywords[j][0] != '\u0000'; j++){
+                    int keywordLength = keywords[j].length;
                     int keyword2 = keywords[j][keywordLength - 1] == '|';
-                    if(keyword2) keywordLength--;
+                    if(keyword2 != 0) keywordLength--;
     
-                    if(!strncmp(row.render[i], keywords[j], keywordLength) 
-                        isSeparator(row.render[i + keywordLength])){
+                    if(!row.render.charAt(i).equals(keywords[j]);
+                        isSeparator(row.render.charAt(i + keywordLength))){
                             memset(row.highLight[i], keyword2 ? Highlight.HL_KEYWORD2: Highlight.HL_KEYWORD1, keywordLength);
                             i+=keywordLength;
                             break;
@@ -808,9 +836,9 @@ public class Editor {
         }
     }
     public static void setStatusMessage(String fmt){
-        vsnprintf(Editor.statusMessage, sizeof(E.statusMessage), fmt, ap);
-        va_end(ap);
-        E.statusMessage_time = time(null);
+        //vsnprintf(Editor.statusMessage, sizeof(E.statusMessage), fmt, ap);
+        System.out.print(Editor.statusMessage);
+        Editor.statusMessage_time = time(null);
     }
 
     public static void refreshScreen(){
@@ -837,6 +865,26 @@ public class Editor {
     
         write(STDOUT_FILENO, ab.b, ab.len);
         abFree(ab);
+    }
+
+    void editorScroll(){
+        // moving the screen around the file
+        if (E.cy < E.displayLength){
+            E.rx = editorRowCxToRx(&Editor.row[E.cy], E.cx);
+        }
+    
+        if (E.cy < E.rowOffset){
+            E.rowOffset = E.cy;
+        }
+        if (E.cy >= E.rowOffset + E.screenRows){
+            E.rowOffset = E.cy - E.screenRows + 1;
+        }
+        if (E.rx < E.columnOffset){
+            E.columnOffset = E.rx;
+        }
+        if (E.rx >= E.columnOffset + E.screenColumns){
+            E.columnOffset = E.rx - E.screenColumns + 1;
+        }
     }
 
     // public static void processKeyPress(){

@@ -7,6 +7,6 @@ public class EditorRow {
     int size;
     int renderSize;
     char[] chars;
-    char[] render;
-    char[] highLight;
+    String render;
+    int[] highLight;
 }
