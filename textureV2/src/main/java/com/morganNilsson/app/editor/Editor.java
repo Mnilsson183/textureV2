@@ -1,9 +1,13 @@
 package com.morganNilsson.app.editor;
 
+import java.io.BufferedReader;
+import java.sql.Time;
+
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 import com.morganNilsson.app.State;
 import com.morganNilsson.app.terminal.TerminalMethods;
+
 
 public class Editor {
 
@@ -16,9 +20,12 @@ public class Editor {
     public static int dirty;
     public static EditorRow row = null;
     public static String fileName = null;
-    public static char[] statusMessage[0] = '\u0000';
-    public static statusMessage_time;
-    public static syntax = null;
+    public static char[] statusMessage;
+    public static Time statusMessage_time;
+    public static EditorSyntax syntax = null;
+    public static final int TEXTURE_TAB_STOP = 8;
+    public static final int TEXTURE_QUIT_TIMES = 3;
+    public static final String TEXTURE_VERSION = "2.01";
 
     public static void initEditor(){
         // cursor positions
@@ -28,38 +35,39 @@ public class Editor {
         rowOffset = 0;
         columnOffset = 0;
         displayLength = 0;
+        statusMessage[0] = '\u0000';
         dirty = 0;
-        statusMessage_time = 0;
+        statusMessage_time = null; // = 0
 
-        if (getWindowSize(&screenRows, &screenColumns) == -1){
+        if (getWindowSize(screenRows, screenColumns) == -1){
             TerminalMethods.terminate("getWindowSize");
         }
         screenRows = screenRows - 2;
     }
 
-    enum keys{
-        BACKSPACE = 127,
-        ARROW_LEFT = 1000,
-        ARROW_RIGHT,
-        ARROW_UP,
-        ARROW_DOWN,
-        DEL_KEY,
-        HOME_KEY,
-        END_KEY,
-        PAGE_UP,
-        PAGE_DOWN,
-    };
+    // enum keys{
+    //     BACKSPACE = 127,
+    //     ARROW_LEFT = 1000,
+    //     ARROW_RIGHT,
+    //     ARROW_UP,
+    //     ARROW_DOWN,
+    //     DEL_KEY,
+    //     HOME_KEY,
+    //     END_KEY,
+    //     PAGE_UP,
+    //     PAGE_DOWN,
+    // };
 
-    enum highlight{
-        HL_NORMAL = 0,
-        HL_COMMENT,
-        HL_MULTIPLE_LINE_COMMENT,
-        HL_KEYWORD1,
-        HL_KEYWORD2,
-        HL_STRING,
-        HL_NUMBER,
-        HL_MATCH
-    };
+    // enum highlight{
+    //     HL_NORMAL = 0,
+    //     HL_COMMENT,
+    //     HL_MULTIPLE_LINE_COMMENT,
+    //     HL_KEYWORD1,
+    //     HL_KEYWORD2,
+    //     HL_STRING,
+    //     HL_NUMBER,
+    //     HL_MATCH
+    // };
 
     String[] C_HL_extensions = {".c", ".h", ".cpp"};
     String[] C_HL_keywords = {
@@ -68,6 +76,10 @@ public class Editor {
         "int|", "long|", "double|", "float|", "char|", "unsigned|", "signed|",
         "void|",
     };
+
+    int isSeparator(int c){
+        return Character.isWhitespace(c) || c == '\0' || ",.()+-/*=~%<>[];".contains(c);
+    }
 
     public static void enableRawMode(){
         // function to enter raw mode of the terminal
@@ -94,8 +106,9 @@ public class Editor {
         int nread;
         char c;
         // read each key press
-        while ((nread = read(STDIN_FILENO, &c, 1)) != 1) {
-            if (nread == -1 && errno != EAGAIN){
+        BufferedReader reader = new BufferedReader(InputStreamReader(System.in));
+        while ((nread = reader.read()) != 1) {
+            if (nread == -1){
                 TerminalMethods.terminate("read");
             }
         }
@@ -105,10 +118,10 @@ public class Editor {
             char[] seq = new char[3];
     
             // read the STDIN and set both the first and second characters in seq
-            if (read(STDIN_FILENO, &seq[0], 1) != 1){
+            if (reader.read(seq, 0, 1) != 1){
                 return '\u001b';
             }
-            if (read(STDIN_FILENO, &seq[1], 1) != 1){
+            if (reader.read(seq, 1, 1) != 1){
                 return '\u001b';
             }
             
@@ -117,7 +130,7 @@ public class Editor {
                 // check that that seq falls into the bounds of our answer
                 if (seq[1] >= '0' && seq[1] <= '9'){
                     // read the STDIN to seq
-                    if (read(STDIN_FILENO, &seq[2], 1) != 1){
+                    if (reader.read(seq, 2, 1) != 1){
                         return '\u001b';
                     }
                     // check if last char is ~ denoting a special charater seq
@@ -171,7 +184,7 @@ public class Editor {
     
         // 
         while (i < buf.length - 1){
-            if (read(STDIN_FILENO, &buf[i], 1)){
+            if (read(STDIN_FILENO, buf[i], 1)){
                 break;
             }
             if(buf[i] == 'R'){
@@ -183,15 +196,14 @@ public class Editor {
         if (buf[0] != '\u001b' || buf[1] != '['){
             return -1;
         }
-        if (sscanf(&buf[2],"%d;%d", rows, columns) != 2){
+        if (sscanf(buf[2],"%d;%d", rows, columns) != 2){
             return -1;
         }
         return 0; 
     }
 
     public static void updateSyntax(EditorRow row){
-        row.highLight = realloc(row.highLight, row.renderSize);
-        memset(row.highLight, HL_NORMAL, row.renderSize);
+        row.highLight = HL_NORMAL;
     
         if(syntax == NULL){
             return;
@@ -218,18 +230,18 @@ public class Editor {
             char prevHighlight = (i > 0) ? row.highLight[i - 1] : HL_NORMAL;
     
     
-            if(singleLightCommentStartLength && !in_string){
-                if(!strncmp(&row.render[i], singleLightCommentStart, singleLightCommentStartLength)){
-                    memset(&row.highLight[i], HL_COMMENT, row.renderSize - i);
+            if(singleLightCommentStartLength && in_string != 0){
+                if(!row.render[i].equals(singleLightCommentStart)){
+                    memset(row.highLight[i], HL_COMMENT, row.renderSize - i);
                     break;
                 }
             }
     
-            if(multilineCommentStartLength && multilineCommentEndLength && !in_string){
+            if(multilineCommentStartLength != 0 && multilineCommentEndLength != 0 && in_string != 0){
                 if(in_comment){
                     row.highLight[i] = HL_MULTIPLE_LINE_COMMENT;
-                    if(!strncmp(&row.render[i], multilineCommentStart, multilineCommentStartLength)){
-                        memset(&row.highLight[i], HL_MULTIPLE_LINE_COMMENT, multilineCommentStartLength);
+                    if(!row.render[i].equals(multilineCommentStart)){
+                        memset(row.highLight[i], HL_MULTIPLE_LINE_COMMENT, multilineCommentStartLength);
                         i += 2;
                         in_comment = 0;
                         prevSeparator = 1;
@@ -238,8 +250,8 @@ public class Editor {
                         i++;
                         continue;
                     }
-                } else if(!strncmp(&row.render[i], multilineCommentStart, multilineCommentStartLength)){
-                        memset(&row.highLight[i], HL_MULTIPLE_LINE_COMMENT, multilineCommentStartLength);
+                } else if(!strncmp(row.render[i], multilineCommentStart, multilineCommentStartLength)){
+                        memset(row.highLight[i], HL_MULTIPLE_LINE_COMMENT, multilineCommentStartLength);
                         i += multilineCommentStartLength;
                         in_comment = 1;
                         continue;
@@ -277,7 +289,7 @@ public class Editor {
     
             if(syntax.flags & HL_HIGHLIGHT_NUMBERS){
                 if((isdigit(c) && (prevSeparator || prevHighlight == HL_NUMBER)) || 
-                (c =='.' && prevHighlight == HL_NUMBER)){
+                    (c =='.' && prevHighlight == HL_NUMBER)){
                     row.highLight[i] = HL_NUMBER;
                     i++;
                     prevSeparator = 0;
@@ -291,9 +303,9 @@ public class Editor {
                     int keyword2 = keywords[j][keywordLength - 1] == '|';
                     if(keyword2) keywordLength--;
     
-                    if(!strncmp(&row.render[i], keywords[j], keywordLength) &&
+                    if(!strncmp(row.render[i], keywords[j], keywordLength) 
                         isSeparator(row.render[i + keywordLength])){
-                            memset(&row.highLight[i], keyword2 ? HL_KEYWORD2: HL_KEYWORD1, keywordLength);
+                            memset(row.highLight[i], keyword2 ? HL_KEYWORD2: HL_KEYWORD1, keywordLength);
                             i+=keywordLength;
                             break;
                     }
@@ -321,27 +333,36 @@ public class Editor {
             default: return 37;
         }
     }
+
+    private static Integer findLastIndex(String s, char target){
+        for(int i = s.length() - 1; i >= 0; i--){
+            if(s.charAt(i) == target){
+                return i;
+            }
+        }
+        return null;
+    }
     
     public static void selectSyntaxHighlight(){
-        syntax = NULL;
-        if(fileName == NULL){
+        syntax = null;
+        if(fileName == null){
             return;
         }
     
-        char *extension = strrchr(fileName, '.');
+        String extension = fileName.substring(findLastIndex(fileName, '.'));
     
-        for(unsigned int j = 0; j < HighLightDataBase_ENTRIES; j++){
-            struct EditorSyntax *s = &HighLightDataBase[j];
-            unsigned int i = 0;
+        for(int j = 0; j < HighLightDataBase_ENTRIES; j++){
+            EditorSyntax *s = HighLightDataBase[j];
+            int i = 0;
             while(s.fileMatch[i]){
                 int is_extension = (s.fileMatch[i][0] == '0');
-                if((is_extension && extension && !strcmp(extension, s.fileMatch[i])) ||
-                    (!is_extension && strstr(fileName, s.fileMatch[i]))){
+                if((is_extension && extension && !extension.equals(s.fileMatch[i])) ||
+                    (!is_extension && fileName.indexOf(s.fileMatch[i]))){
                         syntax = s;
     
                         int fileRow;
                         for(fileRow = 0; fileRow < displayLength; fileRow++){
-                            editorUpdateSyntax(&row[fileRow]);
+                            editorUpdateSyntax(row[fileRow]);
                         }
     
                         return;
@@ -414,7 +435,7 @@ public class Editor {
         }
     
         row = realloc(row, sizeof(EditorRow) * (displayLength + 1));
-        memmove(&row[at + 1], &row[at], sizeof(EditorRow) * (displayLength - at));
+        memmove(row[at + 1], row[at], sizeof(EditorRow) * (displayLength - at));
     
         // add a row to display
         row[at].size = length;
@@ -425,7 +446,7 @@ public class Editor {
         row[at].renderSize = 0;
         row[at].render = NULL;
         row[at].highLight = NULL;
-        editorUpdateRow(&row[at]);
+        editorUpdateRow(row[at]);
     
         displayLength++;
         dirty++;
@@ -441,8 +462,8 @@ public class Editor {
         if(at < 0 || at >= displayLength){
             return;
         }
-        editorFreeRow(&row[at]);
-        memmove(&row[at], &row[at + 1], sizeof(EditorRow) * (displayLength - at - 1));
+        editorFreeRow(row[at]);
+        memmove(row[at], row[at + 1], sizeof(EditorRow) * (displayLength - at - 1));
         displayLength--;
         dirty++;
     }
@@ -452,7 +473,7 @@ public class Editor {
             at = row.size;
         }
         row.chars = realloc(row.chars, row.size + 2);
-            memmove(&row.chars[at + 1], &row.chars[at], row.size - at + 1);
+            memmove(row.chars[at + 1], row.chars[at], row.size - at + 1);
             row.size++;
             row.chars[at] = c;
             editorUpdateRow(row);
@@ -461,7 +482,7 @@ public class Editor {
     
     public static void rowAppendString(EditorRow row, String s){
         row.chars = realloc(row.chars, row.size + s.length() + 1);
-        memcpy(&row.chars[row.size], s, s.length());
+        memcpy(row.chars[row.size], s, s.length());
         row.size += s.length();
         row.chars[row.size] = '\0';
         editorUpdateRow(row);
@@ -472,7 +493,7 @@ public class Editor {
         if (at < 0 || at >= row.size){
             return;
         }
-        memmove(&row.chars[at], &row.chars[at + 1], row.size - at);
+        memmove(row.chars[at], row.chars[at + 1], row.size - at);
         row.size--;
         editorUpdateRow(row);
         dirty++;
@@ -483,7 +504,7 @@ public class Editor {
         if (cy == displayLength){
             editorInsertRow(displayLength, "", 0);
         }
-        editorRowInsertChar(&row[cy], cx, c);
+        editorRowInsertChar(row[cy], cx, c);
         cx++;
     }
     
@@ -491,9 +512,9 @@ public class Editor {
         if(cx == 0){
             editorInsertRow(cy, "", 0);
         } else{
-            EditorRow row = &row[cy];
-            editorInsertRow(cy + 1, &row.chars[cx], row.size - cx);
-            row = &row[cy];
+            EditorRow row = row[cy];
+            editorInsertRow(cy + 1, row.chars[cx], row.size - cx);
+            row = row[cy];
             row.size = cx;
             row.chars[row.size] = '\0';
             editorUpdateRow(row);
@@ -507,18 +528,18 @@ public class Editor {
         if(cy == displayLength){
             return;
         }
-        if(cx == 0 && cy == 0){
+        if(cx == 0  cy == 0){
             return;
         }
     
-        EditorRow row = &row[cy];
+        EditorRow row = row[cy];
     
         if(cx > 0){
             editorRowDeleteChar(row, cx - 1);
             cx--;
         } else{
             cx = row[cy - 1].size;
-            editorRowAppendString(&row[cy - 1], row.chars, row.size);
+            editorRowAppendString(row[cy - 1], row.chars, row.size);
             editorDeleteRow(cy);
             cy--;
         }
@@ -561,9 +582,9 @@ public class Editor {
         size_t lineCap = 0;
         int lineLength = line.length();
         // read each line from this file into the row editorRow data struct chars feild
-        while((lineLength = getline(&line, &lineCap, filePath)) != -1){
+        while((lineLength = getline(line, lineCap, filePath)) != -1){
             // no need to read the carrige return and new line character
-            while ((lineLength > 0) && ((line[lineLength - 1] == '\r') || 
+            while ((lineLength > 0)  ((line[lineLength - 1] == '\r') || 
                                         (line[lineLength - 1] == '\n')))
             {
                 lineLength--;
@@ -586,7 +607,7 @@ public class Editor {
         }
     
         int length;
-        String buffer = editorRowsToString(&length);
+        String buffer = editorRowsToString(length);
         int fd = open(fileName, O_RDWR | O_CREAT, 0644);
         if (fd != -1){
             if(ftruncate(fd, length) != -1){
@@ -644,7 +665,7 @@ public class Editor {
                 current = 0;
             }
     
-            EditorRow row = &row[current];
+            EditorRow row = row[current];
             String match = strstr(row.render, query);
             if(match){
                 last_match = current;
@@ -655,7 +676,7 @@ public class Editor {
                 saved_highLight_line = current;
                 saved_highLight = malloc(row.size);
                 memcpy(saved_highLight, row.highLight, row.renderSize);
-                memset(&row.highLight[match - row.render], HL_MATCH, strlen(query));
+                memset(row.highLight[match - row.render], HL_MATCH, strlen(query));
                 break;
             }
         }
@@ -685,7 +706,7 @@ public class Editor {
             int fileRow = row + rowOffset;
             if (fileRow >= displayLength){
                     // put welcome message 1/3 down the screen
-                    if ((displayLength == 0) && (row == screenRows / 3)){
+                    if ((displayLength == 0)  (row == screenRows / 3)){
                         char[] welcome = new char[80];
                         int welcomeLength = snprintf(welcome, sizeof(welcome),
                         "Texture Editor -- Version %s", TEXTURE_VERSION);
@@ -715,15 +736,15 @@ public class Editor {
                     if (length > screenColumns){
                         length = screenColumns;
                     }
-                    String c = &row[fileRow].render[columnOffset];
-                    unsigned char *highLight = &row[fileRow].highLight[columnOffset];
+                    String c = row[fileRow].render[columnOffset];
+                    unsigned char *highLight = row[fileRow].highLight[columnOffset];
                     int current_color = -1;
                     int j;
                     for(j = 0; j < length; j++){
                         if(iscntrl(c[j])){
                             char sym = (c[j] <= 26) ? '@' + c[j] : '?';
                             ab.append(ab, "\x1b[7m");
-                            ab.append(ab, &sym);
+                            ab.append(ab, sym);
                             ab.append(ab, "\x1b[m");
                             if(current_color != -1){
                                 char[] buf = new char[16];
@@ -735,7 +756,7 @@ public class Editor {
                                 abAppend(ab, "\x1b[39m", 5);
                                 current_color = -1;
                             }
-                            abAppend(ab, &c[j], 1);
+                            abAppend(ab, c[j], 1);
                         } else{
                             int color = editorSyntaxToColor(highLight[j]);
                             if(color != current_color){
@@ -744,7 +765,7 @@ public class Editor {
                             int clen = snprintf(buffer, sizeof(buffer), "\x1b[%dm", color);
                             abAppend(ab, buffer, clen);
                             }
-                            abAppend(ab, &c[j], 1);
+                            abAppend(ab, c[j], 1);
                         }
                     }
                     abAppend(ab, "\x1b[39m", 5);
@@ -769,24 +790,24 @@ public class Editor {
         AppendBuffer ab = APPEND_INIT;
     
         // hide the cursor
-        abAppend(&ab, "\x1b[?25l", 6);
+        abAppend(ab, "\x1b[?25l", 6);
         // move the cursor to the 1,1 position in the terminal
-        abAppend(&ab, "\x1b[H", 3);
+        abAppend(ab, "\x1b[H", 3);
     
-        editorDrawRows(&ab);
-        editorDrawStatusBar(&ab);
-        editorDrawMessageBar(&ab);
+        editorDrawRows(ab);
+        editorDrawStatusBar(ab);
+        editorDrawMessageBar(ab);
     
         char buf[32];
         snprintf(buf, sizeof(buf), "\x1b[%d;%dH",   (E.cy - E.rowOffset) + 1, 
                                                     (E.rx - E.columnOffset) + 1);
-        abAppend(&ab, buf, strlen(buf));
+        abAppend(ab, buf, strlen(buf));
     
         // show cursor again
-        abAppend(&ab, "\x1b[?25h", 6);
+        abAppend(ab, "\x1b[?25h", 6);
     
         write(STDOUT_FILENO, ab.b, ab.len);
-        abFree(&ab);
+        abFree(ab);
     }
 
     void processKeyPress(){
@@ -801,7 +822,7 @@ public class Editor {
     
             // exit case
             case CTRL_KEY('q'):
-                if(E.dirty && quit_times > 0){
+                if(E.dirty  quit_times > 0){
                     editorSetStatusMessage("WARNING!! file has unsaved changes. "
                     "Press Ctrl-Q %d more times to quit", quit_times);
                     quit_times--;
