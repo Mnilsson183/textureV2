@@ -1,8 +1,9 @@
-/home/morgan/Desktop/textureV2/textureV2/src/main/java/com/morganNilsson/app/editor/EditorSyntax.java
-/home/morgan/Desktop/textureV2/textureV2/src/main/java/com/morganNilsson/app/State.java
-/home/morgan/Desktop/textureV2/textureV2/src/main/java/com/morganNilsson/app/editor/EditorRow.java
-/home/morgan/Desktop/textureV2/textureV2/src/main/java/com/morganNilsson/app/editor/AppendBuffer.java
-/home/morgan/Desktop/textureV2/textureV2/src/main/java/com/morganNilsson/app/App.java
-/home/morgan/Desktop/textureV2/textureV2/src/main/java/com/morganNilsson/app/editor/EditorConfig.java
-/home/morgan/Desktop/textureV2/textureV2/src/main/java/com/morganNilsson/app/editor/Editor.java
-/home/morgan/Desktop/textureV2/textureV2/src/main/java/com/morganNilsson/app/terminal/TerminalMethods.java
+/home/morgan/textureV2/textureV2/src/main/java/com/morganNilsson/app/editor/EditorConfig.java
+/home/morgan/textureV2/textureV2/src/main/java/com/morganNilsson/app/App.java
+/home/morgan/textureV2/textureV2/src/main/java/com/morganNilsson/app/editor/EditorRow.java
+/home/morgan/textureV2/textureV2/src/main/java/com/morganNilsson/app/editor/Editor.java
+/home/morgan/textureV2/textureV2/src/main/java/com/morganNilsson/app/editor/AppendBuffer.java
+/home/morgan/textureV2/textureV2/src/main/java/com/morganNilsson/app/editor/EditorSyntax.java
+/home/morgan/textureV2/textureV2/src/main/java/com/morganNilsson/app/terminal/TerminalMethods.java
+/home/morgan/textureV2/textureV2/src/main/java/com/morganNilsson/app/editor/STDIN_FILENO.java
+/home/morgan/textureV2/textureV2/src/main/java/com/morganNilsson/app/State.java

@@ -4,20 +4,20 @@ import org.jline.terminal.Terminal;
 
 public class EditorConfig {
         // cursor position
-        int cx, cy;
-        int rx;
+        public static int cx, cy;
+        public static int rx;
         // screen offsets for moving cursor off screen
-        int rowOffset;
-        int columnOffset;
+        public static int rowOffset;
+        public static int columnOffset;
         // default terminal settings
-        Terminal orig_terminal;
-        int dirty;
+        public static Terminal orig_terminal;
+        public static int dirty;
         // rows and columns of the terminal
-        int screenRows, screenColumns;
-        int displayLength;
-        EditorRow row;
-        char[] fileName;
-        EditorSyntax[] syntax;
-        char[] statusMessage = new char[80];
-        time_t statusMessage_time;
+        public static int screenRows, screenColumns;
+        public static int displayLength;
+        public static EditorRow row;
+        public static char[] fileName;
+        public static EditorSyntax[] syntax;
+        public static char[] statusMessage = new char[80];
+        public static int statusMessage_time; // time_t
 }
