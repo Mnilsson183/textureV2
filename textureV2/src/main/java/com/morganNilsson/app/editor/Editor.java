@@ -43,7 +43,7 @@ public class Editor {
         dirty = 0;
         statusMessage_time = null; // = 0
         STDIN_FILENO = new STDIN_FILENO();
-        EditorConfig.orig_terminal.getHeight()
+        EditorConfig.orig_terminal.getHeight();
 
         if (getWindowSize(EditorConfig.screenRows, EditorConfig.screenColumns) == -1){
             TerminalMethods.terminate("getWindowSize");
@@ -360,8 +360,8 @@ public class Editor {
                 int j;
                 for(j = 0; keywords[j][0] != '\u0000'; j++){
                     int keywordLength = keywords[j].length;
-                    int keyword2 = keywords[j][keywordLength - 1] == '|';
-                    if(keyword2 != 0) keywordLength--;
+                    boolean keyword2 = keywords[j][keywordLength - 1] == '|';
+                    if(keyword2) keywordLength--;
     
                     if(!row.render.charAt(i).equals(keywords[j]);
                         isSeparator(row.render.charAt(i + keywordLength))){
@@ -378,6 +378,10 @@ public class Editor {
             prevSeparator = isSeparator(c);
             i++;
         }
+    }
+
+    static private void memset(Object o1, Object o2, int n){
+
     }
     
     public static int syntaxToColor(int highLight){
