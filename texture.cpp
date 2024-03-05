@@ -19,7 +19,6 @@
 #include <unistd.h>
 #include <time.h>
 #include <stdarg.h>
-#include <iostream>
 
 /** DEFINES**/
 #define CTRL_KEY(key) ((key) & 0x1f)
@@ -30,7 +29,7 @@
 #define APPEND_INIT {NULL, 0}
 
 /* editor options */
-#define TEXTURE_VERSION "0.01"
+#define TEXTURE_VERSION "1.01"
 #define TEXTURE_TAB_STOP 8
 #define TEXTURE_QUIT_TIMES 3
 
@@ -116,12 +115,12 @@ struct EditorConfig{
 struct EditorConfig E;
 
 /* filetypes */
-std::string C_HL_extensions[] = {".c", ".h", ".cpp", NULL};
+std::string C_HL_extensions[] = {".c", ".h", ".cpp", ""};
 std::string C_HL_keywords[] = {
     "switch", "if", "while", "for", "break", "continue", "return", "else",
     "struct", "union", "typedef", "static", "enum", "class", "case",
     "int|", "long|", "double|", "float|", "char|", "unsigned|", "signed|",
-    "void|", NULL
+    "void|", ""
 };
 
 struct EditorSyntax HighLightDataBase[] = {
@@ -336,7 +335,7 @@ void editorUpdateSyntax(EditorRow *row){
     int i = 0;
     while (i < row->renderSize){
         char c = row->render[i];
-        unsigned char prevHighlight = (i > 0) ? row->highLight[i - 1] : HL_NORMAL;
+        unsigned char prevHighlight = (i > 0) ? row->highLight[i - 1] : (char)HL_NORMAL;
 
 
         if(singleLightCommentStartLength && !in_string){
@@ -789,7 +788,7 @@ void editorFind(){
     int saved_columnOffset = E.columnOffset;
     int saved_rowOffset = E.rowOffset;
 
-    char* query = editorPrompt("Search: %s (ESC/Arrows/Enter): ", editorFindCallback);
+    char* query = editorPrompt(strdup("Search: %s (ESC/Arrows/Enter): "), editorFindCallback);
     if(query){
         free(query);
     } else {
@@ -1113,7 +1112,7 @@ void editorDrawStatusBar(struct AppendBuffer *ab){
         E.fileName ? E.fileName : "[No Name]", E.displayLength,
         E.dirty ? "(modified)": "");
     int rlen = snprintf(rStatus, sizeof(rStatus), "%s | %d%d",
-        E.syntax ? E.syntax->filetype : "No Filetype", E.cy + 1, E.displayLength);
+        E.syntax ? E.syntax->filetype.c_str() : strdup("No Filetype"), E.cy + 1, E.displayLength);
     if(length > E.screenColumns){
         length = E.screenColumns;
     }
