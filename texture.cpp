@@ -97,6 +97,7 @@ struct EditorConfig{
     // cursor position
     int cx, cy;
     int rx;
+    char mode;
     // screen offsets for moving cursor off screen
     int rowOffset;
     int columnOffset;
@@ -918,91 +919,102 @@ void editorProcessKeyPress(void){
 
     int c = editorReadKey();
 
-    switch (c){
-        case '\r':
-            editorInsertNewLine();
-            break;
-
-        // exit case
-        case CTRL_KEY('q'):
-            if(E.dirty && quit_times > 0){
-                editorSetStatusMessage("WARNING!! file has unsaved changes. "
-                "Press Ctrl-Q %d more times to quit", quit_times);
-                quit_times--;
-                return;
-            }
-            // write the 4 byte erase in display to the screen
-            write(STDOUT_FILENO, "\x1b[2J", 4);
-            // move the cursor to the 1,1 position in the terminal
-            write(STDOUT_FILENO, "\x1b[H", 3);
-            exit(0);
-            break;
-
-        case CTRL_KEY('s'):
-            editorSave();
-            break;
-        // home key sets the x position to the home 
-        case HOME_KEY:
-            E.cx = 0;
-            break;
-        // end key sets the x position to the column before the end of the screen
-        case END_KEY:
-            if (E.cy < E.displayLength){
-                E.cx = E.row[E.cy].size;
-            }
-            break;
-
-        case CTRL_KEY('f'):
-            if(E.cy < E.displayLength){
-                editorFind();
-            }
-            break;
-
-        case BACKSPACE:
-        case CTRL_KEY('h'):
-        case DEL_KEY:
-            if(c == DEL_KEY){
-                editorMoveCursor(ARROW_RIGHT);
-            }
-            editorDeleteChar();
-            break;
-
-
-        // send the cursor to the top of the column in cases up and down
-        case PAGE_UP:
-        case PAGE_DOWN:
-            {
-                if (c == PAGE_UP){
-                    E.cy = E.rowOffset;
-                } else if(c == PAGE_DOWN){
-                    E.cy = E.rowOffset + E.screenRows - 1;
+    if(E.mode == 'n'){
+        switch(c){
+            // switch mode
+            case 'i':
+                E.mode = 'i';
+                break;
+            // exit case
+            case CTRL_KEY('q'):
+                if(E.dirty && quit_times > 0){
+                    editorSetStatusMessage("WARNING!! file has unsaved changes. "
+                    "Press Ctrl-Q %d more times to quit", quit_times);
+                    quit_times--;
+                    return;
                 }
-
-                if (E.cy > E.displayLength){
-                    E.cy = E.displayLength;
+                // write the 4 byte erase in display to the screen
+                write(STDOUT_FILENO, "\x1b[2J", 4);
+                // move the cursor to the 1,1 position in the terminal
+                write(STDOUT_FILENO, "\x1b[H", 3);
+                exit(0);
+                break;
+            case CTRL_KEY('s'):
+                editorSave();
+                break;
+            case CTRL_KEY('f'):
+                if(E.cy < E.displayLength){
+                    editorFind();
                 }
+                break;
+            case ARROW_UP:
+            case ARROW_DOWN:
+            case ARROW_LEFT:
+            case ARROW_RIGHT:
+                editorMoveCursor(c);
+                break;
+            case CTRL_KEY('l'):
+            case '\x1b':
+                break;
+        }
+    } else if(E.mode == 'i'){
+        switch(c){
 
-                int times = E.screenRows;
-                while(times--){
-                    editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
+            case '\r':
+                editorInsertNewLine();
+                break;
+            // home key sets the x position to the home 
+            case HOME_KEY:
+                E.cx = 0;
+                break;
+            // end key sets the x position to the column before the end of the screen
+            case END_KEY:
+                if (E.cy < E.displayLength){
+                    E.cx = E.row[E.cy].size;
                 }
-            }
-            break;
+                break;
+            case BACKSPACE:
+            case CTRL_KEY('h'):
+            case DEL_KEY:
+                if(c == DEL_KEY){
+                    editorMoveCursor(ARROW_RIGHT);
+                }
+                editorDeleteChar();
+                break;
+            // send the cursor to the top of the column in cases up and down
+            case PAGE_UP:
+            case PAGE_DOWN:
+                {
+                    if (c == PAGE_UP){
+                        E.cy = E.rowOffset;
+                    } else if(c == PAGE_DOWN){
+                        E.cy = E.rowOffset + E.screenRows - 1;
+                    }
 
-        case ARROW_UP:
-        case ARROW_DOWN:
-        case ARROW_LEFT:
-        case ARROW_RIGHT:
-            editorMoveCursor(c);
-            break;
+                    if (E.cy > E.displayLength){
+                        E.cy = E.displayLength;
+                    }
 
-        case CTRL_KEY('l'):
-        case '\x1b':
-            break;
-
-        default:
+                    int times = E.screenRows;
+                    while(times--){
+                        editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
+                    }
+                }
+                break;
+            case ARROW_UP:
+            case ARROW_DOWN:
+            case ARROW_LEFT:
+            case ARROW_RIGHT:
+                editorMoveCursor(c);
+                break;
+            case CTRL_KEY('l'):
+            case '\x1b':
+            E.mode = 'n';
+                break;
+            default:
             editorInsertChar(c);
             break;
+        }
     }
     quit_times = TEXTURE_QUIT_TIMES;
 }
@@ -1106,12 +1118,20 @@ void editorDrawRows(struct AppendBuffer *ab){
     }
 }
 
+char* convertModeToString(){
+    switch (E.mode){
+        case 'n': return "normal";
+        case 'i': return "insert";
+    }
+}
+
 void editorDrawStatusBar(struct AppendBuffer *ab){
     abAppend(ab, "\x1b[7m", 4);
     char status[80], rStatus[80];
-    int length = snprintf(status, sizeof(status), "%.20s - %d lines %s", 
+    int length = snprintf(status, sizeof(status), "%.20s - %d lines %s- %s", 
         E.fileName ? E.fileName : "[No Name]", E.displayLength,
-        E.dirty ? "(modified)": "");
+        E.dirty ? "(modified)": "",
+        convertModeToString());
     int rlen = snprintf(rStatus, sizeof(rStatus), "%s | %d%d",
         E.syntax ? E.syntax->filetype.c_str() : strdup("No Filetype"), E.cy + 1, E.displayLength);
     if(length > E.screenColumns){
@@ -1182,6 +1202,7 @@ void initEditor(void){
     E.cx = 0;
     E.cy = 0;
     E.rx = 0;
+    E.mode = 'n';
     E.rowOffset = 0;
     E.columnOffset = 0;
     E.displayLength = 0;
