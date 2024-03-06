@@ -19,6 +19,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <stdarg.h>
+#include <iostream>
 
 /** DEFINES**/
 #define CTRL_KEY(key) ((key) & 0x1f)
