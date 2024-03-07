@@ -30,8 +30,8 @@
 #define APPEND_INIT {NULL, 0}
 
 /* editor options */
-#define TEXTURE_VERSION "1.01"
-#define TEXTURE_TAB_STOP 8
+#define TEXTURE_VERSION "2.01"
+#define TEXTURE_TAB_STOP 4
 #define TEXTURE_QUIT_TIMES 3
 
 #define HL_HIGHLIGHT_NUMBERS (1<<0)
@@ -914,6 +914,20 @@ void editorMoveCursor(int key){
     }
 }
 
+void commandHandle(char* command){
+    char* startPtr = command;
+    char *endptr;
+    int value = E.cy;
+    printf("why");
+    while(*startPtr != '\0'){
+        int value = strtol(startPtr, &endptr, 10);
+        if(endptr == startPtr || !isspace(*endptr) && *endptr != '\0'){
+            return;
+        }
+    }
+    E.cy = value;
+}
+
 void editorProcessKeyPress(void){
     static int quit_times = TEXTURE_QUIT_TIMES;
 
@@ -924,6 +938,15 @@ void editorProcessKeyPress(void){
             // switch mode
             case 'i':
                 E.mode = 'i';
+                break;
+            case 'v':
+                E.mode = 'v';
+                break;
+            case 'V':
+                E.mode = 'V';
+                break;
+            case ':':
+                //commandHandle(editorPrompt(strdup(":"), NULL));
                 break;
             // exit case
             case CTRL_KEY('q'):
@@ -1008,6 +1031,26 @@ void editorProcessKeyPress(void){
                 editorMoveCursor(c);
                 break;
             case CTRL_KEY('l'):
+            case '\x1b':
+            E.mode = 'n';
+                break;
+            default:
+            editorInsertChar(c);
+            break;
+        }
+    } else if(E.mode == 'v'){
+        switch (c){
+        case CTRL_KEY('l'):
+            case '\x1b':
+            E.mode = 'n';
+                break;
+            default:
+            editorInsertChar(c);
+            break;
+        }
+    } else if(E.mode == 'V'){
+        switch (c){
+        case CTRL_KEY('l'):
             case '\x1b':
             E.mode = 'n';
                 break;
@@ -1120,19 +1163,26 @@ void editorDrawRows(struct AppendBuffer *ab){
 
 char* convertModeToString(){
     switch (E.mode){
-        case 'n': return "normal";
-        case 'i': return "insert";
+        case 'n': return strdup("normal");
+        case 'i': return strdup("insert");
+        case 'v': return strdup("visual");
+        case 'V': return strdup("visual line");
+        default: return strdup("");
     }
 }
 
 void editorDrawStatusBar(struct AppendBuffer *ab){
-    abAppend(ab, "\x1b[7m", 4);
+    switch(E.mode){
+        default:
+            abAppend(ab, "\x1b[7m", 4);
+            break;
+    }
     char status[80], rStatus[80];
     int length = snprintf(status, sizeof(status), "%.20s - %d lines %s- %s", 
         E.fileName ? E.fileName : "[No Name]", E.displayLength,
         E.dirty ? "(modified)": "",
         convertModeToString());
-    int rlen = snprintf(rStatus, sizeof(rStatus), "%s | %d%d",
+    int rlen = snprintf(rStatus, sizeof(rStatus), "%s | %d/%d",
         E.syntax ? E.syntax->filetype.c_str() : strdup("No Filetype"), E.cy + 1, E.displayLength);
     if(length > E.screenColumns){
         length = E.screenColumns;
@@ -1234,4 +1284,3 @@ int main(int argc, char* argv[]){
         editorProcessKeyPress();
     }
     return 0;
-}
