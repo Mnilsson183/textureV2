@@ -928,7 +928,6 @@ void editorSetRow(int row){
     E.editors[E.screenNumber].cy = row;
 }
 
-// not working
 void handleCommand(char* s){
     char command = s[0];
     printf("%c",command);
@@ -938,8 +937,8 @@ void handleCommand(char* s){
     std::string str;
     while(s[i] != '\0'){
         str = str + s[i];
+        i++;
     }
-    printf("yes");
     switch(command){
         case 'l':
             try{
@@ -947,10 +946,31 @@ void handleCommand(char* s){
                 editorSetRow(lineNumber);
             }
             catch(const std::exception& e){
-
+                editorSetStatusMessage("line number is impossible");
                 return;
             }
-
+            break;
+        // move + or - lines
+        case '-':
+            try{
+                int lineNumber = std::stoi(str);
+                editorSetRow(E.editors[E.screenNumber].cy - lineNumber);
+            }
+            catch(const std::exception& e){
+                editorSetStatusMessage("line number is impossible");
+                return;
+            }
+            break;
+        case '+':
+            try{
+                int lineNumber = std::stoi(str);
+                editorSetRow(E.editors[E.screenNumber].cy + lineNumber);
+            }
+            catch(const std::exception& e){
+                editorSetStatusMessage("line number is impossible");
+                return;
+            }
+            break;
     }
 }
 
@@ -987,7 +1007,7 @@ void editorProcessKeyPress(void){
                 E.editors[E.screenNumber].mode = 'V';
                 break;
             case ':':
-                handleCommand(editorPrompt(strdup(":"), NULL));
+                handleCommand(editorPrompt(strdup(": %s"), NULL));
                 break;
             case 'O':
                 editorOpen(editorPrompt(strdup("Open file: %s"), NULL));
