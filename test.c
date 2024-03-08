@@ -1,0 +1,10 @@
+what
+where 
+when 
+how
+thus
+nill
+nil
+null
+NULL
+wqeqwe

@@ -33,6 +33,7 @@
 #define TEXTURE_VERSION "2.01"
 #define TEXTURE_TAB_STOP 4
 #define TEXTURE_QUIT_TIMES 3
+#define SCREEN_MAX 5
 
 #define HL_HIGHLIGHT_NUMBERS (1<<0)
 #define HL_HIGHLIGHT_STRINGS (1<<1)
@@ -104,6 +105,7 @@ struct EditorConfig{
     // default terminal settings
     struct termios orig_termios;
     int dirty;
+    std::string infoLine;
     // rows and columns of the terminal
     int screenRows, screenColumns;
     int displayLength;
@@ -114,7 +116,12 @@ struct EditorConfig{
     time_t statusMessage_time;
 };
 
-struct EditorConfig E;
+struct EditorScreens{
+    struct EditorConfig editors[SCREEN_MAX];
+    int screenNumber;
+};
+
+struct EditorScreens E;
 
 /* filetypes */
 std::string C_HL_extensions[] = {".c", ".h", ".cpp", ""};
@@ -150,7 +157,7 @@ void terminate(const char *s){
 
 void disableRawMode(void){
     // set the terminal attributes to the original values
-    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.orig_termios) == -1){
+    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.editors[E.screenNumber].orig_termios) == -1){
         terminate("tcsetattr");
     }
 }
@@ -158,13 +165,13 @@ void enableRawMode(void){
     // function to enter raw mode of the terminal
 
     // tcgetattr reads the terminal attributes
-    if(tcgetattr(STDIN_FILENO, &E.orig_termios) == -1){
+    if(tcgetattr(STDIN_FILENO, &E.editors[E.screenNumber].orig_termios) == -1){
         terminate("tcgetattr");
     }
     // atexit disable the raw mode once the program finishes running
     atexit(disableRawMode);
 
-    struct termios raw = E.orig_termios;
+    struct termios raw = E.editors[E.screenNumber].orig_termios;
 
     // terminal flags and other specifiers that allow out program to output
     raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
@@ -303,27 +310,19 @@ int isSeparator(int c){
     return isspace(c) || c == '\0' || strchr(",.()+-/*=~%<>[];", c);
 }
 
-char * convertStdStringToCharPtr(std::string s){
-    char *c = new char[s.length()+1];
-    for(long unsigned int i = 0; i < s.length(); i++){
-        c[i] = s[i];
-    }
-    return c;
-}
-
 void editorUpdateSyntax(EditorRow *row){
     row->highLight = reinterpret_cast<unsigned char*>(realloc(row->highLight, row->renderSize));
     memset(row->highLight, HL_NORMAL, row->renderSize);
 
-    if(E.syntax == NULL){
+    if(E.editors[E.screenNumber].syntax == NULL){
         return;
     }
 
-    std::string *keywords = E.syntax->keywords;
+    std::string *keywords = E.editors[E.screenNumber].syntax->keywords;
 
-    char *singleLightCommentStart = convertStdStringToCharPtr(E.syntax->singleline_comment_start);
-    char *multilineCommentStart = convertStdStringToCharPtr(E.syntax->multiline_comment_start);
-    char *multilineCommentEnd = convertStdStringToCharPtr(E.syntax->multiline_comment_end);
+    const char *singleLightCommentStart = E.editors[E.screenNumber].syntax->singleline_comment_start.c_str();
+    const char *multilineCommentStart = E.editors[E.screenNumber].syntax->multiline_comment_start.c_str();
+    const char *multilineCommentEnd = E.editors[E.screenNumber].syntax->multiline_comment_end.c_str();
 
     int singleLightCommentStartLength = singleLightCommentStart ? strlen(singleLightCommentStart): 0;
     int multilineCommentStartLength = multilineCommentStart ? strlen(multilineCommentStart) : 0;
@@ -368,7 +367,7 @@ void editorUpdateSyntax(EditorRow *row){
             }
         }
 
-        if(E.syntax->flags & HL_HIGHLIGHT_STRINGS){
+        if(E.editors[E.screenNumber].syntax->flags & HL_HIGHLIGHT_STRINGS){
             if(in_string){
                 if(c == '\\' && i + 1 < row->renderSize){
                     row->highLight[i + 1] = HL_STRING;
@@ -397,7 +396,7 @@ void editorUpdateSyntax(EditorRow *row){
             }
         }
 
-        if(E.syntax->flags & HL_HIGHLIGHT_NUMBERS){
+        if(E.editors[E.screenNumber].syntax->flags & HL_HIGHLIGHT_NUMBERS){
             if((isdigit(c) && (prevSeparator || prevHighlight == HL_NUMBER)) || 
             (c =='.' && prevHighlight == HL_NUMBER)){
                 row->highLight[i] = HL_NUMBER;
@@ -445,12 +444,12 @@ int editorSyntaxToColor(int highLight){
 }
 
 void editorSelectSyntaxHighlight(void){
-    E.syntax = NULL;
-    if(E.fileName == NULL){
+    E.editors[E.screenNumber].syntax = NULL;
+    if(E.editors[E.screenNumber].fileName == NULL){
         return;
     }
 
-    char *extension = strrchr(E.fileName, '.');
+    char *extension = strrchr(E.editors[E.screenNumber].fileName, '.');
 
     for(unsigned int j = 0; j < HighLightDataBase_ENTRIES; j++){
         struct EditorSyntax *s = &HighLightDataBase[j];
@@ -458,12 +457,12 @@ void editorSelectSyntaxHighlight(void){
         while(s->fileMatch[i] != ""){
             int is_extension = (s->fileMatch[i][0] == '0');
             if((is_extension && extension && !strcmp(extension, s->fileMatch[i].c_str())) ||
-                (!is_extension && s->fileMatch[i].find(E.fileName))){
-                    E.syntax = s;
+                (!is_extension && s->fileMatch[i].find(E.editors[E.screenNumber].fileName))){
+                    E.editors[E.screenNumber].syntax = s;
 
                     int fileRow;
-                    for(fileRow = 0; fileRow < E.displayLength; fileRow++){
-                        editorUpdateSyntax(&E.row[fileRow]);
+                    for(fileRow = 0; fileRow < E.editors[E.screenNumber].displayLength; fileRow++){
+                        editorUpdateSyntax(&E.editors[E.screenNumber].row[fileRow]);
                     }
 
                     return;
@@ -531,26 +530,26 @@ void editorUpdateRow(EditorRow *row){
 }
 
 void editorInsertRow(int at, char* s, size_t length){
-    if(at < 0 || at > E.displayLength){
+    if(at < 0 || at > E.editors[E.screenNumber].displayLength){
         return;
     }
 
-    E.row = reinterpret_cast<EditorRow*>(realloc(E.row, sizeof(EditorRow) * (E.displayLength + 1)));
-    memmove(&E.row[at + 1], &E.row[at], sizeof(EditorRow) * (E.displayLength - at));
+    E.editors[E.screenNumber].row = reinterpret_cast<EditorRow*>(realloc(E.editors[E.screenNumber].row, sizeof(EditorRow) * (E.editors[E.screenNumber].displayLength + 1)));
+    memmove(&E.editors[E.screenNumber].row[at + 1], &E.editors[E.screenNumber].row[at], sizeof(EditorRow) * (E.editors[E.screenNumber].displayLength - at));
 
     // add a row to display
-    E.row[at].size = length;
-    E.row[at].chars = reinterpret_cast<char *>(malloc(length + 1));
-    memcpy(E.row[at].chars, s, length);
-    E.row[at].chars[length] = '\0';
+    E.editors[E.screenNumber].row[at].size = length;
+    E.editors[E.screenNumber].row[at].chars = reinterpret_cast<char *>(malloc(length + 1));
+    memcpy(E.editors[E.screenNumber].row[at].chars, s, length);
+    E.editors[E.screenNumber].row[at].chars[length] = '\0';
 
-    E.row[at].renderSize = 0;
-    E.row[at].render = NULL;
-    E.row[at].highLight = NULL;
-    editorUpdateRow(&E.row[at]);
+    E.editors[E.screenNumber].row[at].renderSize = 0;
+    E.editors[E.screenNumber].row[at].render = NULL;
+    E.editors[E.screenNumber].row[at].highLight = NULL;
+    editorUpdateRow(&E.editors[E.screenNumber].row[at]);
 
-    E.displayLength++;
-    E.dirty++;
+    E.editors[E.screenNumber].displayLength++;
+    E.editors[E.screenNumber].dirty++;
 }
 
 void editorFreeRow(EditorRow *row){
@@ -560,13 +559,13 @@ void editorFreeRow(EditorRow *row){
 }
 
 void editorDeleteRow(int at){
-    if(at < 0 || at >= E.displayLength){
+    if(at < 0 || at >= E.editors[E.screenNumber].displayLength){
         return;
     }
-    editorFreeRow(&E.row[at]);
-    memmove(&E.row[at], &E.row[at + 1], sizeof(EditorRow) * (E.displayLength - at - 1));
-    E.displayLength--;
-    E.dirty++;
+    editorFreeRow(&E.editors[E.screenNumber].row[at]);
+    memmove(&E.editors[E.screenNumber].row[at], &E.editors[E.screenNumber].row[at + 1], sizeof(EditorRow) * (E.editors[E.screenNumber].displayLength - at - 1));
+    E.editors[E.screenNumber].displayLength--;
+    E.editors[E.screenNumber].dirty++;
 }
 
 void editorRowInsertChar(EditorRow *row, int at, int c){
@@ -578,7 +577,7 @@ void editorRowInsertChar(EditorRow *row, int at, int c){
         row->size++;
         row->chars[at] = c;
         editorUpdateRow(row);
-        E.dirty++;
+        E.editors[E.screenNumber].dirty++;
 }
 
 void editorRowAppendString(EditorRow *row, char *s, size_t length){
@@ -587,7 +586,7 @@ void editorRowAppendString(EditorRow *row, char *s, size_t length){
     row->size += length;
     row->chars[row->size] = '\0';
     editorUpdateRow(row);
-    E.dirty++;
+    E.editors[E.screenNumber].dirty++;
 }
 
 void editorRowDeleteChar(EditorRow *row, int at){
@@ -597,52 +596,52 @@ void editorRowDeleteChar(EditorRow *row, int at){
     memmove(&row->chars[at], &row->chars[at + 1], row->size - at);
     row->size--;
     editorUpdateRow(row);
-    E.dirty++;
+    E.editors[E.screenNumber].dirty++;
 }
 
 /* Editor Functions */
 void editorInsertChar(int c){
-    if (E.cy == E.displayLength){
-        editorInsertRow(E.displayLength, strdup(""), 0);
+    if (E.editors[E.screenNumber].cy == E.editors[E.screenNumber].displayLength){
+        editorInsertRow(E.editors[E.screenNumber].displayLength, strdup(""), 0);
     }
-    editorRowInsertChar(&E.row[E.cy], E.cx, c);
-    E.cx++;
+    editorRowInsertChar(&E.editors[E.screenNumber].row[E.editors[E.screenNumber].cy], E.editors[E.screenNumber].cx, c);
+    E.editors[E.screenNumber].cx++;
 }
 
 void editorInsertNewLine(){
-    if(E.cx == 0){
-        editorInsertRow(E.cy, strdup(""), 0);
+    if(E.editors[E.screenNumber].cx == 0){
+        editorInsertRow(E.editors[E.screenNumber].cy, strdup(""), 0);
     } else{
-        EditorRow *row = &E.row[E.cy];
-        editorInsertRow(E.cy + 1, &row->chars[E.cx], row->size - E.cx);
-        row = &E.row[E.cy];
-        row->size = E.cx;
+        EditorRow *row = &E.editors[E.screenNumber].row[E.editors[E.screenNumber].cy];
+        editorInsertRow(E.editors[E.screenNumber].cy + 1, &row->chars[E.editors[E.screenNumber].cx], row->size - E.editors[E.screenNumber].cx);
+        row = &E.editors[E.screenNumber].row[E.editors[E.screenNumber].cy];
+        row->size = E.editors[E.screenNumber].cx;
         row->chars[row->size] = '\0';
         editorUpdateRow(row);
     }
-    E.cy++;
-    E.cx = 0;
+    E.editors[E.screenNumber].cy++;
+    E.editors[E.screenNumber].cx = 0;
 }
 
 
 void editorDeleteChar(){
-    if(E.cy == E.displayLength){
+    if(E.editors[E.screenNumber].cy == E.editors[E.screenNumber].displayLength){
         return;
     }
-    if(E.cx == 0 && E.cy == 0){
+    if(E.editors[E.screenNumber].cx == 0 && E.editors[E.screenNumber].cy == 0){
         return;
     }
 
-    EditorRow *row = &E.row[E.cy];
+    EditorRow *row = &E.editors[E.screenNumber].row[E.editors[E.screenNumber].cy];
 
-    if(E.cx > 0){
-        editorRowDeleteChar(row, E.cx - 1);
-        E.cx--;
+    if(E.editors[E.screenNumber].cx > 0){
+        editorRowDeleteChar(row, E.editors[E.screenNumber].cx - 1);
+        E.editors[E.screenNumber].cx--;
     } else{
-        E.cx = E.row[E.cy - 1].size;
-        editorRowAppendString(&E.row[E.cy - 1], row->chars, row->size);
-        editorDeleteRow(E.cy);
-        E.cy--;
+        E.editors[E.screenNumber].cx = E.editors[E.screenNumber].row[E.editors[E.screenNumber].cy - 1].size;
+        editorRowAppendString(&E.editors[E.screenNumber].row[E.editors[E.screenNumber].cy - 1], row->chars, row->size);
+        editorDeleteRow(E.editors[E.screenNumber].cy);
+        E.editors[E.screenNumber].cy--;
     }
 }
 
@@ -652,16 +651,16 @@ void editorDeleteChar(){
 char* editorRowsToString(int* bufferlength){
     int totalLength = 0;
     int j;
-    for(j = 0; j < E.displayLength; j++){
-        totalLength += E.row[j].size + 1;
+    for(j = 0; j < E.editors[E.screenNumber].displayLength; j++){
+        totalLength += E.editors[E.screenNumber].row[j].size + 1;
     }
     *bufferlength = totalLength;
 
     char *buf = reinterpret_cast<char *>(malloc(totalLength));
     char *p = buf;
-    for(j = 0; j < E.displayLength; j++){
-        memcpy(p, E.row[j].chars, E.row[j].size);
-        p += E.row[j].size;
+    for(j = 0; j < E.editors[E.screenNumber].displayLength; j++){
+        memcpy(p, E.editors[E.screenNumber].row[j].chars, E.editors[E.screenNumber].row[j].size);
+        p += E.editors[E.screenNumber].row[j].size;
         *p = '\n';
         p++;
     }
@@ -670,8 +669,8 @@ char* editorRowsToString(int* bufferlength){
 
 void editorOpen(char* filename){
     // open a file given a file path
-    free(E.fileName);
-    E.fileName = strdup(filename);
+    free(E.editors[E.screenNumber].fileName);
+    E.editors[E.screenNumber].fileName = strdup(filename);
 
     editorSelectSyntaxHighlight();
 
@@ -689,18 +688,18 @@ void editorOpen(char* filename){
                                     (line[lineLength - 1] == '\n')))
         {
             lineLength--;
-            editorInsertRow(E.displayLength, line, lineLength);
+            editorInsertRow(E.editors[E.screenNumber].displayLength, line, lineLength);
         }
     }
     free(line);
     fclose(filePath);
-    E.dirty = 0;
+    E.editors[E.screenNumber].dirty = 0;
 }
 
 void editorSave(){
-    if(E.fileName == NULL){
-        E.fileName = editorPrompt(strdup("Save as (Esc to cancel): %s"), NULL);
-        if(E.fileName == NULL){
+    if(E.editors[E.screenNumber].fileName == NULL){
+        E.editors[E.screenNumber].fileName = editorPrompt(strdup("Save as (Esc to cancel): %s"), NULL);
+        if(E.editors[E.screenNumber].fileName == NULL){
             editorSetStatusMessage("Save aborted");
             return;
         }
@@ -709,13 +708,13 @@ void editorSave(){
 
     int length;
     char *buffer = editorRowsToString(&length);
-    int fd = open(E.fileName, O_RDWR | O_CREAT, 0644);
+    int fd = open(E.editors[E.screenNumber].fileName, O_RDWR | O_CREAT, 0644);
     if (fd != -1){
         if(ftruncate(fd, length) != -1){
             if(write(fd, buffer, length) == length){
                 close(fd);
                 free(buffer);
-                E.dirty = 0;
+                E.editors[E.screenNumber].dirty = 0;
                 editorSetStatusMessage("%d bytes written to disk", length);
                 return;
             }
@@ -735,7 +734,7 @@ void editorFindCallback(char *query, int key){
     static char *saved_highLight = NULL;
 
     if(saved_highLight){
-        memcpy(E.row[saved_highLight_line].highLight, saved_highLight, E.row[saved_highLight_line].renderSize);
+        memcpy(E.editors[E.screenNumber].row[saved_highLight_line].highLight, saved_highLight, E.editors[E.screenNumber].row[saved_highLight_line].renderSize);
         free(saved_highLight);
         saved_highLight = NULL;
     }
@@ -758,21 +757,21 @@ void editorFindCallback(char *query, int key){
     }
     int current = last_match;
     int i;
-    for(i = 0; i < E.displayLength; i++){
+    for(i = 0; i < E.editors[E.screenNumber].displayLength; i++){
         current += direction;
         if(current == -1){
-            current = E.displayLength - 1;
-        } else if(current == E.displayLength){
+            current = E.editors[E.screenNumber].displayLength - 1;
+        } else if(current == E.editors[E.screenNumber].displayLength){
             current = 0;
         }
 
-        EditorRow *row = &E.row[current];
+        EditorRow *row = &E.editors[E.screenNumber].row[current];
         char *match = strstr(row->render, query);
         if(match){
             last_match = current;
-            E.cy = current;
-            E.cx = editorRowRxToCx(row, match - row->render);
-            E.rowOffset = E.displayLength;
+            E.editors[E.screenNumber].cy = current;
+            E.editors[E.screenNumber].cx = editorRowRxToCx(row, match - row->render);
+            E.editors[E.screenNumber].rowOffset = E.editors[E.screenNumber].displayLength;
 
             saved_highLight_line = current;
             saved_highLight = reinterpret_cast<char *>(malloc(row->size));
@@ -785,19 +784,19 @@ void editorFindCallback(char *query, int key){
 }
 
 void editorFind(){
-    int saved_cx = E.cx;
-    int saved_cy = E.cy;
-    int saved_columnOffset = E.columnOffset;
-    int saved_rowOffset = E.rowOffset;
+    int saved_cx = E.editors[E.screenNumber].cx;
+    int saved_cy = E.editors[E.screenNumber].cy;
+    int saved_columnOffset = E.editors[E.screenNumber].columnOffset;
+    int saved_rowOffset = E.editors[E.screenNumber].rowOffset;
 
     char* query = editorPrompt(strdup("Search: %s (ESC/Arrows/Enter): "), editorFindCallback);
     if(query){
         free(query);
     } else {
-        E.cx = saved_cx;
-        E.cy = saved_cy;
-        E.columnOffset = saved_columnOffset;
-        E.rowOffset = saved_rowOffset;
+        E.editors[E.screenNumber].cx = saved_cx;
+        E.editors[E.screenNumber].cy = saved_cy;
+        E.editors[E.screenNumber].columnOffset = saved_columnOffset;
+        E.editors[E.screenNumber].rowOffset = saved_rowOffset;
     }
 }
 
@@ -872,60 +871,93 @@ char *editorPrompt(char *prompt, void (*callback)(char *, int)){
 }
 
 void editorMoveCursor(int key){
-    EditorRow* row = (E.cy >= E.displayLength) ? NULL: &E.row[E.cy];
+    EditorRow* row = (E.editors[E.screenNumber].cy >= E.editors[E.screenNumber].displayLength) ? NULL: &E.editors[E.screenNumber].row[E.editors[E.screenNumber].cy];
     
     // update the cursor position based on the key inputs
     switch (key)
     {
         case ARROW_LEFT:
-            if (E.cx != 0){
-                E.cx--;
-            } else if(E.cy > 0){
-                E.cy--;
-                E.cx = E.row[E.cy].size;
+            if (E.editors[E.screenNumber].cx != 0){
+                E.editors[E.screenNumber].cx--;
+            } else if(E.editors[E.screenNumber].cy > 0){
+                E.editors[E.screenNumber].cy--;
+                E.editors[E.screenNumber].cx = E.editors[E.screenNumber].row[E.editors[E.screenNumber].cy].size;
             }
             break;
         case ARROW_RIGHT:
-            if (row && E.cx < row->size){
-                E.cx++;
+            if (row && E.editors[E.screenNumber].cx < row->size){
+                E.editors[E.screenNumber].cx++;
             // if go right on a the end of line
-            } else if(row && E.cx == row->size){
-                E.cy++;
-                E.cx = 0;
+            } else if(row && E.editors[E.screenNumber].cx == row->size){
+                E.editors[E.screenNumber].cy++;
+                E.editors[E.screenNumber].cx = 0;
             }
             break;
         case ARROW_UP:
-            if (E.cy != 0){
-                E.cy--;
+            if (E.editors[E.screenNumber].cy != 0){
+                E.editors[E.screenNumber].cy--;
             }
             break;
         case ARROW_DOWN:
-            if (E.cy < E.displayLength){
-                E.cy++;
+            if (E.editors[E.screenNumber].cy < E.editors[E.screenNumber].displayLength){
+                E.editors[E.screenNumber].cy++;
             }
             break;
     }
 
     // snap cursor to the end of line
-    row = (E.cy >= E.displayLength) ? NULL : &E.row[E.cy];
+    row = (E.editors[E.screenNumber].cy >= E.editors[E.screenNumber].displayLength) ? NULL : &E.editors[E.screenNumber].row[E.editors[E.screenNumber].cy];
     int rowLength = row ? row->size : 0;
-    if (E.cx > rowLength){
-        E.cx = rowLength;
+    if (E.editors[E.screenNumber].cx > rowLength){
+        E.editors[E.screenNumber].cx = rowLength;
     }
 }
 
-void commandHandle(char* command){
-    char* startPtr = command;
-    char *endptr;
-    int value = E.cy;
-    printf("why");
-    while(*startPtr != '\0'){
-        int value = strtol(startPtr, &endptr, 10);
-        if(endptr == startPtr || !isspace(*endptr) && *endptr != '\0'){
-            return;
-        }
+void editorSetRow(int row){
+    if(row > E.editors[E.screenNumber].displayLength) row = E.editors[E.screenNumber].displayLength;
+    else if(row < 0) row = 0;
+    E.editors[E.screenNumber].cy = row;
+}
+
+// not working
+void handleCommand(char* s){
+    char command = s[0];
+    printf("%c",command);
+    // first char identifier
+    size_t startIndex = 1;
+    size_t i = startIndex;
+    std::string str;
+    while(s[i] != '\0'){
+        str = str + s[i];
     }
-    E.cy = value;
+    printf("yes");
+    switch(command){
+        case 'l':
+            try{
+                int lineNumber = std::stoi(str);
+                editorSetRow(lineNumber);
+            }
+            catch(const std::exception& e){
+
+                return;
+            }
+
+    }
+}
+
+// cannot changer E.screen number directly or might try to use non created value
+void editorSwitchScreenUp(){
+    E.screenNumber++;
+    if(E.screenNumber > SCREEN_MAX){
+        E.screenNumber = 1;
+    }
+}
+
+void editorSwitchScreenDown(){
+    E.screenNumber--;
+    if(E.screenNumber < 1){
+        E.screenNumber = SCREEN_MAX;
+    }
 }
 
 void editorProcessKeyPress(void){
@@ -933,24 +965,31 @@ void editorProcessKeyPress(void){
 
     int c = editorReadKey();
 
-    if(E.mode == 'n'){
+    if(E.editors[E.screenNumber].mode == 'n'){
         switch(c){
             // switch mode
             case 'i':
-                E.mode = 'i';
+                E.editors[E.screenNumber].mode = 'i';
                 break;
             case 'v':
-                E.mode = 'v';
+                E.editors[E.screenNumber].mode = 'v';
                 break;
             case 'V':
-                E.mode = 'V';
+                E.editors[E.screenNumber].mode = 'V';
                 break;
             case ':':
-                //commandHandle(editorPrompt(strdup(":"), NULL));
+                handleCommand(editorPrompt(strdup(":"), NULL));
+                break;
+
+            case CTRL_KEY('x'):
+                editorSwitchScreenUp();
+                break;
+            case CTRL_KEY('z'):
+                editorSwitchScreenDown();
                 break;
             // exit case
             case CTRL_KEY('q'):
-                if(E.dirty && quit_times > 0){
+                if(E.editors[E.screenNumber].dirty && quit_times > 0){
                     editorSetStatusMessage("WARNING!! file has unsaved changes. "
                     "Press Ctrl-Q %d more times to quit", quit_times);
                     quit_times--;
@@ -966,7 +1005,7 @@ void editorProcessKeyPress(void){
                 editorSave();
                 break;
             case CTRL_KEY('f'):
-                if(E.cy < E.displayLength){
+                if(E.editors[E.screenNumber].cy < E.editors[E.screenNumber].displayLength){
                     editorFind();
                 }
                 break;
@@ -980,7 +1019,7 @@ void editorProcessKeyPress(void){
             case '\x1b':
                 break;
         }
-    } else if(E.mode == 'i'){
+    } else if(E.editors[E.screenNumber].mode == 'i'){
         switch(c){
 
             case '\r':
@@ -988,12 +1027,12 @@ void editorProcessKeyPress(void){
                 break;
             // home key sets the x position to the home 
             case HOME_KEY:
-                E.cx = 0;
+                E.editors[E.screenNumber].cx = 0;
                 break;
             // end key sets the x position to the column before the end of the screen
             case END_KEY:
-                if (E.cy < E.displayLength){
-                    E.cx = E.row[E.cy].size;
+                if (E.editors[E.screenNumber].cy < E.editors[E.screenNumber].displayLength){
+                    E.editors[E.screenNumber].cx = E.editors[E.screenNumber].row[E.editors[E.screenNumber].cy].size;
                 }
                 break;
             case BACKSPACE:
@@ -1009,16 +1048,16 @@ void editorProcessKeyPress(void){
             case PAGE_DOWN:
                 {
                     if (c == PAGE_UP){
-                        E.cy = E.rowOffset;
+                        E.editors[E.screenNumber].cy = E.editors[E.screenNumber].rowOffset;
                     } else if(c == PAGE_DOWN){
-                        E.cy = E.rowOffset + E.screenRows - 1;
+                        E.editors[E.screenNumber].cy = E.editors[E.screenNumber].rowOffset + E.editors[E.screenNumber].screenRows - 1;
                     }
 
-                    if (E.cy > E.displayLength){
-                        E.cy = E.displayLength;
+                    if (E.editors[E.screenNumber].cy > E.editors[E.screenNumber].displayLength){
+                        E.editors[E.screenNumber].cy = E.editors[E.screenNumber].displayLength;
                     }
 
-                    int times = E.screenRows;
+                    int times = E.editors[E.screenNumber].screenRows;
                     while(times--){
                         editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
                     }
@@ -1032,27 +1071,27 @@ void editorProcessKeyPress(void){
                 break;
             case CTRL_KEY('l'):
             case '\x1b':
-            E.mode = 'n';
+            E.editors[E.screenNumber].mode = 'n';
                 break;
             default:
             editorInsertChar(c);
             break;
         }
-    } else if(E.mode == 'v'){
+    } else if(E.editors[E.screenNumber].mode == 'v'){
         switch (c){
         case CTRL_KEY('l'):
             case '\x1b':
-            E.mode = 'n';
+            E.editors[E.screenNumber].mode = 'n';
                 break;
             default:
             editorInsertChar(c);
             break;
         }
-    } else if(E.mode == 'V'){
+    } else if(E.editors[E.screenNumber].mode == 'V'){
         switch (c){
         case CTRL_KEY('l'):
             case '\x1b':
-            E.mode = 'n';
+            E.editors[E.screenNumber].mode = 'n';
                 break;
             default:
             editorInsertChar(c);
@@ -1065,41 +1104,41 @@ void editorProcessKeyPress(void){
 /** OUTPUT **/
 void editorScroll(){
     // moving the screen around the file
-    if (E.cy < E.displayLength){
-        E.rx = editorRowCxToRx(&E.row[E.cy], E.cx);
+    if (E.editors[E.screenNumber].cy < E.editors[E.screenNumber].displayLength){
+        E.editors[E.screenNumber].rx = editorRowCxToRx(&E.editors[E.screenNumber].row[E.editors[E.screenNumber].cy], E.editors[E.screenNumber].cx);
     }
 
-    if (E.cy < E.rowOffset){
-        E.rowOffset = E.cy;
+    if (E.editors[E.screenNumber].cy < E.editors[E.screenNumber].rowOffset){
+        E.editors[E.screenNumber].rowOffset = E.editors[E.screenNumber].cy;
     }
-    if (E.cy >= E.rowOffset + E.screenRows){
-        E.rowOffset = E.cy - E.screenRows + 1;
+    if (E.editors[E.screenNumber].cy >= E.editors[E.screenNumber].rowOffset + E.editors[E.screenNumber].screenRows){
+        E.editors[E.screenNumber].rowOffset = E.editors[E.screenNumber].cy - E.editors[E.screenNumber].screenRows + 1;
     }
-    if (E.rx < E.columnOffset){
-        E.columnOffset = E.rx;
+    if (E.editors[E.screenNumber].rx < E.editors[E.screenNumber].columnOffset){
+        E.editors[E.screenNumber].columnOffset = E.editors[E.screenNumber].rx;
     }
-    if (E.rx >= E.columnOffset + E.screenColumns){
-        E.columnOffset = E.rx - E.screenColumns + 1;
+    if (E.editors[E.screenNumber].rx >= E.editors[E.screenNumber].columnOffset + E.editors[E.screenNumber].screenColumns){
+        E.editors[E.screenNumber].columnOffset = E.editors[E.screenNumber].rx - E.editors[E.screenNumber].screenColumns + 1;
     }
 }
 
 void editorDrawRows(struct AppendBuffer *ab){
     // draw stuff
     int row;
-    for(row = 0; row < E.screenRows; row++){
-        int fileRow = row + E.rowOffset;
-        if (fileRow >= E.displayLength){
+    for(row = 0; row < E.editors[E.screenNumber].screenRows; row++){
+        int fileRow = row + E.editors[E.screenNumber].rowOffset;
+        if (fileRow >= E.editors[E.screenNumber].displayLength){
                 // put welcome message 1/3 down the screen
-                if ((E.displayLength == 0) && (row == E.screenRows / 3)){
+                if ((E.editors[E.screenNumber].displayLength == 0) && (row == E.editors[E.screenNumber].screenRows / 3)){
                     char welcome[80];
                     int welcomeLength = snprintf(welcome, sizeof(welcome),
                     "Texture Editor -- Version %s", TEXTURE_VERSION);
                     // if screen size is too small to fit the welcome message cut it off
-                    if (welcomeLength > E.screenColumns){
-                        welcomeLength = E.screenColumns;
+                    if (welcomeLength > E.editors[E.screenNumber].screenColumns){
+                        welcomeLength = E.editors[E.screenNumber].screenColumns;
                     }
                     // put the message in the middle of the screen
-                    int padding = (E.screenColumns - welcomeLength) / 2;
+                    int padding = (E.editors[E.screenNumber].screenColumns - welcomeLength) / 2;
                     if (padding){
                         abAppend(ab, "~", 1);
                         padding--;
@@ -1113,17 +1152,19 @@ void editorDrawRows(struct AppendBuffer *ab){
                 }
             } else {
                 // else write the val in the column
-                int length = E.row[fileRow].renderSize - E.columnOffset;
+                int length = E.editors[E.screenNumber].row[fileRow].renderSize - E.editors[E.screenNumber].columnOffset;
                 if (length < 0){
                     length = 0;
                 }
-                if (length > E.screenColumns){
-                    length = E.screenColumns;
+                if (length > E.editors[E.screenNumber].screenColumns){
+                    length = E.editors[E.screenNumber].screenColumns;
                 }
-                char *c = &E.row[fileRow].render[E.columnOffset];
-                unsigned char *highLight = &E.row[fileRow].highLight[E.columnOffset];
+                char *c = &E.editors[E.screenNumber].row[fileRow].render[E.editors[E.screenNumber].columnOffset];
+                unsigned char *highLight = &E.editors[E.screenNumber].row[fileRow].highLight[E.editors[E.screenNumber].columnOffset];
                 int current_color = -1;
                 int j;
+                // std::string LineString = "" + std::to_string(fileRow) + "| ";
+                // abAppend(ab, LineString.c_str(), LineString.length());
                 for(j = 0; j < length; j++){
                     if(iscntrl(c[j])){
                         char sym = (c[j] <= 26) ? '@' + c[j] : '?';
@@ -1162,7 +1203,7 @@ void editorDrawRows(struct AppendBuffer *ab){
 }
 
 char* convertModeToString(){
-    switch (E.mode){
+    switch (E.editors[E.screenNumber].mode){
         case 'n': return strdup("normal");
         case 'i': return strdup("insert");
         case 'v': return strdup("visual");
@@ -1172,24 +1213,26 @@ char* convertModeToString(){
 }
 
 void editorDrawStatusBar(struct AppendBuffer *ab){
-    switch(E.mode){
+    switch(E.editors[E.screenNumber].mode){
         default:
             abAppend(ab, "\x1b[7m", 4);
             break;
     }
     char status[80], rStatus[80];
-    int length = snprintf(status, sizeof(status), "%.20s - %d lines %s- %s", 
-        E.fileName ? E.fileName : "[No Name]", E.displayLength,
-        E.dirty ? "(modified)": "",
-        convertModeToString());
+    int length = snprintf(status, sizeof(status), "%.20s - %d lines %s- %s - screen number %d | %s", 
+        E.editors[E.screenNumber].fileName ? E.editors[E.screenNumber].fileName : "[No Name]", E.editors[E.screenNumber].displayLength,
+        E.editors[E.screenNumber].dirty ? "(modified)": "",
+        convertModeToString(),
+        E.screenNumber,
+        E.editors[E.screenNumber].infoLine.c_str());
     int rlen = snprintf(rStatus, sizeof(rStatus), "%s | %d/%d",
-        E.syntax ? E.syntax->filetype.c_str() : strdup("No Filetype"), E.cy + 1, E.displayLength);
-    if(length > E.screenColumns){
-        length = E.screenColumns;
+        E.editors[E.screenNumber].syntax ? E.editors[E.screenNumber].syntax->filetype.c_str() : strdup("No Filetype"), E.editors[E.screenNumber].cy + 1, E.editors[E.screenNumber].displayLength);
+    if(length > E.editors[E.screenNumber].screenColumns){
+        length = E.editors[E.screenNumber].screenColumns;
     }
     abAppend(ab , status, length);
-    while(length < E.screenColumns){
-        if (E.screenColumns - length == rlen){
+    while(length < E.editors[E.screenNumber].screenColumns){
+        if (E.editors[E.screenNumber].screenColumns - length == rlen){
             abAppend(ab, rStatus, rlen);
             break;
         } else{
@@ -1203,12 +1246,12 @@ void editorDrawStatusBar(struct AppendBuffer *ab){
 
 void editorDrawMessageBar(struct AppendBuffer *ab){
     abAppend(ab, "\x1b[K", 3);
-    int messageLength = strlen(E.statusMessage);
-    if (messageLength > E.screenColumns){
-        messageLength = E.screenColumns;
+    int messageLength = strlen(E.editors[E.screenNumber].statusMessage);
+    if (messageLength > E.editors[E.screenNumber].screenColumns){
+        messageLength = E.editors[E.screenNumber].screenColumns;
     }
-    if (messageLength && time(NULL) - E.statusMessage_time < 5){
-        abAppend(ab, E.statusMessage, messageLength);
+    if (messageLength && time(NULL) - E.editors[E.screenNumber].statusMessage_time < 5){
+        abAppend(ab, E.editors[E.screenNumber].statusMessage, messageLength);
     }
 }
 
@@ -1227,8 +1270,8 @@ void editorRefreshScreen(void){
     editorDrawMessageBar(&ab);
 
     char buf[32];
-    snprintf(buf, sizeof(buf), "\x1b[%d;%dH",   (E.cy - E.rowOffset) + 1, 
-                                                (E.rx - E.columnOffset) + 1);
+    snprintf(buf, sizeof(buf), "\x1b[%d;%dH",   (E.editors[E.screenNumber].cy - E.editors[E.screenNumber].rowOffset) + 1, 
+                                                (E.editors[E.screenNumber].rx - E.editors[E.screenNumber].columnOffset) + 1);
     abAppend(&ab, buf, strlen(buf));
 
     // show cursor again
@@ -1241,32 +1284,39 @@ void editorRefreshScreen(void){
 void editorSetStatusMessage(const char *fmt, ...){
     va_list ap;
     va_start (ap, fmt);
-    vsnprintf(E.statusMessage, sizeof(E.statusMessage), fmt, ap);
+    vsnprintf(E.editors[E.screenNumber].statusMessage, sizeof(E.editors[E.screenNumber].statusMessage), fmt, ap);
     va_end(ap);
-    E.statusMessage_time = time(NULL);
+    E.editors[E.screenNumber].statusMessage_time = time(NULL);
 }
 
 /** INIT **/
-void initEditor(void){
+void initScreen(int screen){
     // cursor positions
-    E.cx = 0;
-    E.cy = 0;
-    E.rx = 0;
-    E.mode = 'n';
-    E.rowOffset = 0;
-    E.columnOffset = 0;
-    E.displayLength = 0;
-    E.dirty = 0;
-    E.row = NULL;
-    E.fileName = NULL;
-    E.statusMessage[0] = '\0';
-    E.statusMessage_time = 0;
-    E.syntax = NULL;
+    E.editors[screen].cx = 0;
+    E.editors[screen].cy = 0;
+    E.editors[screen].rx = 0;
+    E.editors[screen].mode = 'n';
+    E.editors[screen].rowOffset = 0;
+    E.editors[screen].columnOffset = 0;
+    E.editors[screen].displayLength = 0;
+    E.editors[screen].dirty = 0;
+    E.editors[screen].row = NULL;
+    E.editors[screen].fileName = NULL;
+    E.editors[screen].statusMessage[0] = '\0';
+    E.editors[screen].statusMessage_time = 0;
+    E.editors[screen].syntax = NULL;
 
-    if (getWindowSize(&E.screenRows, &E.screenColumns) == -1){
+    if (getWindowSize(&E.editors[screen].screenRows, &E.editors[screen].screenColumns) == -1){
         terminate("getWindowSize");
     }
-    E.screenRows = E.screenRows - 2;
+    E.editors[screen].screenRows = E.editors[screen].screenRows - 2;
+}
+
+void initEditor(){
+    for(int i = 1; i <= SCREEN_MAX; i++){
+        initScreen(i);
+    }
+    E.screenNumber = 1;
 }
 
 int main(int argc, char* argv[]){
@@ -1284,3 +1334,4 @@ int main(int argc, char* argv[]){
         editorProcessKeyPress();
     }
     return 0;
+}
