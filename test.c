@@ -1,4 +1,4 @@
-what
+oh brother what
 where 
 when 
 how
@@ -7,4 +7,5 @@ nill
 nil
 null
 NULL
-wqeqwe
+wqeqwe
+what is that strange thing

@@ -34,6 +34,7 @@
 #define TEXTURE_TAB_STOP 4
 #define TEXTURE_QUIT_TIMES 3
 #define SCREEN_MAX 5
+#define SCREEN_MIN 1
 
 #define HL_HIGHLIGHT_NUMBERS (1<<0)
 #define HL_HIGHLIGHT_STRINGS (1<<1)
@@ -65,6 +66,7 @@ enum editorHighlight{
 void editorSetStatusMessage(const char *fmt, ...);
 void editorRefreshScreen(void);
 char *editorPrompt(char *prompt, void (*callback)(char *, int));
+void initScreen(int screen);
 
 
 /** DATA **/
@@ -102,8 +104,6 @@ struct EditorConfig{
     // screen offsets for moving cursor off screen
     int rowOffset;
     int columnOffset;
-    // default terminal settings
-    struct termios orig_termios;
     int dirty;
     std::string infoLine;
     // rows and columns of the terminal
@@ -117,8 +117,10 @@ struct EditorConfig{
 };
 
 struct EditorScreens{
-    struct EditorConfig editors[SCREEN_MAX];
+    struct EditorConfig editors[SCREEN_MAX+1];
     int screenNumber;
+    // default terminal settings
+    struct termios orig_termios;
 };
 
 struct EditorScreens E;
@@ -157,7 +159,7 @@ void terminate(const char *s){
 
 void disableRawMode(void){
     // set the terminal attributes to the original values
-    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.editors[E.screenNumber].orig_termios) == -1){
+    if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.orig_termios) == -1){
         terminate("tcsetattr");
     }
 }
@@ -165,13 +167,13 @@ void enableRawMode(void){
     // function to enter raw mode of the terminal
 
     // tcgetattr reads the terminal attributes
-    if(tcgetattr(STDIN_FILENO, &E.editors[E.screenNumber].orig_termios) == -1){
+    if(tcgetattr(STDIN_FILENO, &E.orig_termios) == -1){
         terminate("tcgetattr");
     }
     // atexit disable the raw mode once the program finishes running
     atexit(disableRawMode);
 
-    struct termios raw = E.editors[E.screenNumber].orig_termios;
+    struct termios raw = E.orig_termios;
 
     // terminal flags and other specifiers that allow out program to output
     raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
@@ -669,14 +671,21 @@ char* editorRowsToString(int* bufferlength){
 
 void editorOpen(char* filename){
     // open a file given a file path
-    free(E.editors[E.screenNumber].fileName);
+    if(E.editors[E.screenNumber].dirty){
+        editorSetStatusMessage("WARNING!! file has unsaved changes. Please save changes of clear editor");
+        return;
+    }
+    initScreen(E.screenNumber);
+
     E.editors[E.screenNumber].fileName = strdup(filename);
 
     editorSelectSyntaxHighlight();
 
     FILE *filePath = fopen(filename, "r");
     if (!filePath){
-        terminate("fopen");
+        editorSetStatusMessage("file not found", NULL);
+        E.editors[E.screenNumber].fileName = NULL;
+        return;
     }
     char *line = NULL;
     size_t lineCap = 0;
@@ -949,13 +958,13 @@ void handleCommand(char* s){
 void editorSwitchScreenUp(){
     E.screenNumber++;
     if(E.screenNumber > SCREEN_MAX){
-        E.screenNumber = 1;
+        E.screenNumber = SCREEN_MIN;
     }
 }
 
 void editorSwitchScreenDown(){
     E.screenNumber--;
-    if(E.screenNumber < 1){
+    if(E.screenNumber < SCREEN_MIN){
         E.screenNumber = SCREEN_MAX;
     }
 }
@@ -980,6 +989,9 @@ void editorProcessKeyPress(void){
             case ':':
                 handleCommand(editorPrompt(strdup(":"), NULL));
                 break;
+            case 'O':
+                editorOpen(editorPrompt(strdup("Open file: %s"), NULL));
+                break;
 
             case CTRL_KEY('x'):
                 editorSwitchScreenUp();
@@ -987,7 +999,17 @@ void editorProcessKeyPress(void){
             case CTRL_KEY('z'):
                 editorSwitchScreenDown();
                 break;
-            // exit case
+            // exit current
+            case CTRL_KEY('c'):
+                if(E.editors[E.screenNumber].dirty && quit_times > 0){
+                    editorSetStatusMessage("WARNING!! file has unsaved changes. "
+                    "Press Ctrl-C %d more times to quit", quit_times);
+                    quit_times--;
+                    return;
+                }
+                initScreen(E.screenNumber);
+                break;
+            // exit all
             case CTRL_KEY('q'):
                 if(E.editors[E.screenNumber].dirty && quit_times > 0){
                     editorSetStatusMessage("WARNING!! file has unsaved changes. "
@@ -1313,10 +1335,10 @@ void initScreen(int screen){
 }
 
 void initEditor(){
-    for(int i = 1; i <= SCREEN_MAX; i++){
+    for(int i = SCREEN_MIN; i <= SCREEN_MAX; i++){
         initScreen(i);
     }
-    E.screenNumber = 1;
+    E.screenNumber = SCREEN_MIN;
 }
 
 int main(int argc, char* argv[]){
@@ -1327,7 +1349,7 @@ int main(int argc, char* argv[]){
         editorOpen(argv[1]);
     }
 
-    editorSetStatusMessage("HELP: Ctrl-q to quit | Ctrl-s to save | Ctrl-f find");
+    editorSetStatusMessage("HELP: Ctrl-q to quit | Ctrl-s to save | Ctrl-f find | 'O' open file");
     
     while (true){
         editorRefreshScreen();
