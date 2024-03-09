@@ -126,7 +126,7 @@ struct EditorScreens{
 struct EditorScreens E;
 
 /* filetypes */
-std::string C_HL_extensions[] = {".c", ".h", ".cpp", ""};
+std::string C_HL_extensions[] = {".c", ".h", ".cpp"};
 std::string C_HL_keywords[] = {
     "switch", "if", "while", "for", "break", "continue", "return", "else",
     "struct", "union", "typedef", "static", "enum", "class", "case",
@@ -134,15 +134,26 @@ std::string C_HL_keywords[] = {
     "void|", ""
 };
 
+std::string Py_HL_extensions[] = {".py", ""};
+std::string Py_HL_keywords[] = {
+    "if", "elif", "else", "def", "for"
+};
+
 struct EditorSyntax HighLightDataBase[] = {
-    {
-    "c",
+    {"c",
     C_HL_extensions,
     C_HL_keywords,
-    "//", "/*", "*/",
-    HL_HIGHLIGHT_NUMBERS | HL_HIGHLIGHT_STRINGS
-    },
+    // temp change fix later # -> //
+    "#", "/*", "*/",
+    HL_HIGHLIGHT_NUMBERS | HL_HIGHLIGHT_STRINGS},
+    
+    {"py",
+    Py_HL_extensions,
+    Py_HL_keywords,
+    "#", "", "",
+    HL_HIGHLIGHT_NUMBERS | HL_HIGHLIGHT_STRINGS},
 };
+
 
 #define HighLightDataBase_ENTRIES (sizeof(HighLightDataBase) / sizeof(HighLightDataBase[0]))
 
@@ -452,7 +463,7 @@ void editorSelectSyntaxHighlight(void){
     }
 
     char *extension = strrchr(E.editors[E.screenNumber].fileName, '.');
-
+	
     for(unsigned int j = 0; j < HighLightDataBase_ENTRIES; j++){
         struct EditorSyntax *s = &HighLightDataBase[j];
         unsigned int i = 0;
