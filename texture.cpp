@@ -615,7 +615,7 @@ void editorRowDeleteChar(EditorRow *row, int at){
 /* Editor Functions */
 void editorInsertChar(int c){
     if (E.editors[E.screenNumber].cy == E.editors[E.screenNumber].displayLength){
-        editorInsertRow(E.editors[E.screenNumber].displayLength, strdup(""), 0);
+        editorInsertRow(E.editors[E.screenNumber].displayLength, strdup(""),0);
     }
     editorRowInsertChar(&E.editors[E.screenNumber].row[E.editors[E.screenNumber].cy], E.editors[E.screenNumber].cx, c);
     E.editors[E.screenNumber].cx++;
