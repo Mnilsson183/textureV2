@@ -1,7 +1,6 @@
 CC=g++
-texture: texture.cpp
-	${CC} texture.cpp -o build/texture -fPIC -fstack-protector-strong -z relro -z now -flto -D_FORTIFY_SOURCE=2 -fPIE -Wall -Wextra -pedantic
-	cppcheck texture.cpp
+texture: texture.c
+	${CC} texture.c -o build/texture -Wall -Wextra -pedantic
 
 memcheck:
 	valgrind --leak-check=full ./build/texture

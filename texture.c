@@ -19,7 +19,6 @@
 #include <unistd.h>
 #include <time.h>
 #include <stdarg.h>
-#include <iostream>
 
 /** DEFINES**/
 #define CTRL_KEY(key) ((key) & 0x1f)
@@ -85,12 +84,12 @@ struct AppendBuffer{
 };
 
 struct EditorSyntax{
-    std::string filetype;
-    std::string *fileMatch;
-    std::string *keywords;
-    std::string singleline_comment_start;
-    std::string multiline_comment_start;
-    std::string multiline_comment_end;
+    char* filetype;
+    char** fileMatch;
+    char** keywords;
+    char* singleline_comment_start;
+    char* multiline_comment_start;
+    char* multiline_comment_end;
     int flags;
 };
 
@@ -105,7 +104,7 @@ struct EditorConfig{
     int rowOffset;
     int columnOffset;
     int dirty;
-    std::string infoLine;
+    char* infoLine;
     // rows and columns of the terminal
     int screenRows, screenColumns;
     int displayLength;
@@ -126,16 +125,16 @@ struct EditorScreens{
 struct EditorScreens E;
 
 /* filetypes */
-std::string C_HL_extensions[] = {".c", ".h", ".cpp"};
-std::string C_HL_keywords[] = {
+char* C_HL_extensions[] = {".c", ".h", ".cpp"};
+char* C_HL_keywords[] = {
     "switch", "if", "while", "for", "break", "continue", "return", "else",
     "struct", "union", "typedef", "static", "enum", "class", "case",
     "int|", "long|", "double|", "float|", "char|", "unsigned|", "signed|",
     "void|", ""
 };
 
-std::string Py_HL_extensions[] = {".py", ""};
-std::string Py_HL_keywords[] = {
+char* Py_HL_extensions[] = {".py", ""};
+char* Py_HL_keywords[] = {
     "if", "elif", "else", "def", "for"
 };
 
@@ -324,18 +323,18 @@ int isSeparator(int c){
 }
 
 void editorUpdateSyntax(EditorRow *row){
-    row->highLight = reinterpret_cast<unsigned char*>(realloc(row->highLight, row->renderSize));
+    row->highLight = (unsigned char*)realloc(row->highLight, row->renderSize);
     memset(row->highLight, HL_NORMAL, row->renderSize);
 
     if(E.editors[E.screenNumber].syntax == NULL){
         return;
     }
 
-    std::string *keywords = E.editors[E.screenNumber].syntax->keywords;
+    char** keywords = E.editors[E.screenNumber].syntax->keywords;
 
-    const char *singleLightCommentStart = E.editors[E.screenNumber].syntax->singleline_comment_start.c_str();
-    const char *multilineCommentStart = E.editors[E.screenNumber].syntax->multiline_comment_start.c_str();
-    const char *multilineCommentEnd = E.editors[E.screenNumber].syntax->multiline_comment_end.c_str();
+    const char *singleLightCommentStart = E.editors[E.screenNumber].syntax->singleline_comment_start;
+    const char *multilineCommentStart = E.editors[E.screenNumber].syntax->multiline_comment_start;
+    const char *multilineCommentEnd = E.editors[E.screenNumber].syntax->multiline_comment_end;
 
     int singleLightCommentStartLength = singleLightCommentStart ? strlen(singleLightCommentStart): 0;
     int multilineCommentStartLength = multilineCommentStart ? strlen(multilineCommentStart) : 0;
@@ -421,11 +420,11 @@ void editorUpdateSyntax(EditorRow *row){
         if(prevSeparator){
             int j;
             for(j = 0; keywords[j] != ""; j++){
-                int keywordLength = keywords[j].length();
+                int keywordLength = strlen(keywords[j]);
                 int keyword2 = keywords[j][keywordLength - 1] == '|';
                 if(keyword2) keywordLength--;
 
-                if(!strncmp(&row->render[i], keywords[j].c_str(), keywordLength) &&
+                if(!strncmp(&row->render[i], keywords[j], keywordLength) &&
                     isSeparator(row->render[i + keywordLength])){
                         memset(&row->highLight[i], keyword2 ? HL_KEYWORD2: HL_KEYWORD1, keywordLength);
                         i+=keywordLength;
@@ -469,8 +468,8 @@ void editorSelectSyntaxHighlight(void){
         unsigned int i = 0;
         while(s->fileMatch[i] != ""){
             int is_extension = (s->fileMatch[i][0] == '0');
-            if((is_extension && extension && !strcmp(extension, s->fileMatch[i].c_str())) ||
-                (!is_extension && s->fileMatch[i].find(E.editors[E.screenNumber].fileName))){
+            if((is_extension && extension && !strcmp(extension, s->fileMatch[i])) ||
+                (!is_extension && strstr(E.editors[E.screenNumber].fileName, s->fileMatch[i]))){
                     E.editors[E.screenNumber].syntax = s;
 
                     int fileRow;
@@ -523,7 +522,7 @@ void editorUpdateRow(EditorRow *row){
         }
     }
     free(row->render);
-    row->render = reinterpret_cast<char *>(malloc(row->size + ( tabs * (TEXTURE_TAB_STOP - 1)) + 1));
+    row->render = (char *)malloc(row->size + ( tabs * (TEXTURE_TAB_STOP - 1)) + 1);
 
     int tempLength = 0;
     for (j = 0; j < row->size; j++){
@@ -547,12 +546,12 @@ void editorInsertRow(int at, char* s, size_t length){
         return;
     }
 
-    E.editors[E.screenNumber].row = reinterpret_cast<EditorRow*>(realloc(E.editors[E.screenNumber].row, sizeof(EditorRow) * (E.editors[E.screenNumber].displayLength + 1)));
+    E.editors[E.screenNumber].row = (EditorRow *)realloc(E.editors[E.screenNumber].row, sizeof(EditorRow) * (E.editors[E.screenNumber].displayLength + 1));
     memmove(&E.editors[E.screenNumber].row[at + 1], &E.editors[E.screenNumber].row[at], sizeof(EditorRow) * (E.editors[E.screenNumber].displayLength - at));
 
     // add a row to display
     E.editors[E.screenNumber].row[at].size = length;
-    E.editors[E.screenNumber].row[at].chars = reinterpret_cast<char *>(malloc(length + 1));
+    E.editors[E.screenNumber].row[at].chars = (char *)malloc(length + 1);
     memcpy(E.editors[E.screenNumber].row[at].chars, s, length);
     E.editors[E.screenNumber].row[at].chars[length] = '\0';
 
@@ -585,7 +584,7 @@ void editorRowInsertChar(EditorRow *row, int at, int c){
     if (at < 0 || at > row->size){ 
         at = row->size;
     }
-    row->chars = reinterpret_cast<char *>(realloc(row->chars, row->size + 2));
+    row->chars = (char *)realloc(row->chars, row->size + 2);
         memmove(&row->chars[at + 1], &row->chars[at], row->size - at + 1);
         row->size++;
         row->chars[at] = c;
@@ -594,7 +593,7 @@ void editorRowInsertChar(EditorRow *row, int at, int c){
 }
 
 void editorRowAppendString(EditorRow *row, char *s, size_t length){
-    row->chars = reinterpret_cast<char *>(realloc(row->chars, row->size + length + 1));
+    row->chars = (char *)realloc(row->chars, row->size + length + 1);
     memcpy(&row->chars[row->size], s, length);
     row->size += length;
     row->chars[row->size] = '\0';
@@ -669,7 +668,7 @@ char* editorRowsToString(int* bufferlength){
     }
     *bufferlength = totalLength;
 
-    char *buf = reinterpret_cast<char *>(malloc(totalLength));
+    char *buf = (char *)malloc(totalLength);
     char *p = buf;
     for(j = 0; j < E.editors[E.screenNumber].displayLength; j++){
         memcpy(p, E.editors[E.screenNumber].row[j].chars, E.editors[E.screenNumber].row[j].size);
@@ -794,7 +793,7 @@ void editorFindCallback(char *query, int key){
             E.editors[E.screenNumber].rowOffset = E.editors[E.screenNumber].displayLength;
 
             saved_highLight_line = current;
-            saved_highLight = reinterpret_cast<char *>(malloc(row->size));
+            saved_highLight = (char *)malloc(row->size);
             memcpy(saved_highLight, row->highLight, row->renderSize);
             memset(&row->highLight[match - row->render], HL_MATCH, strlen(query));
             break;
@@ -825,7 +824,7 @@ void editorFind(){
 void abAppend(struct AppendBuffer *ab, const char *s, int len){
     // append  to the appendBuffer 
     // give more memory to the information field of the struct
-    char* newAppend = reinterpret_cast<char *>(realloc(ab->b, ab->len + len));
+    char* newAppend = (char *)realloc(ab->b, ab->len + len);
 
     // error check
     if (newAppend == NULL){
@@ -846,7 +845,7 @@ void abFree(struct AppendBuffer *ab){
 /** INPUT**/
 char *editorPrompt(char *prompt, void (*callback)(char *, int)){
     size_t bufferSize = 128;
-    char *buffer = reinterpret_cast<char *>(malloc(bufferSize));
+    char *buffer = (char *)malloc(bufferSize);
 
     size_t bufferLength = 0;
     buffer[0] = '\0';
@@ -878,7 +877,7 @@ char *editorPrompt(char *prompt, void (*callback)(char *, int)){
         } else if(!iscntrl(c) && c < 128){
             if(bufferLength == bufferSize - 1){
                 bufferSize *= 2;
-                buffer = reinterpret_cast<char *>(realloc(buffer, bufferSize));
+                buffer = (char *)realloc(buffer, bufferSize);
             }
             buffer[bufferLength++] = c;
             buffer[bufferLength] = '\0';
@@ -933,10 +932,11 @@ void editorMoveCursor(int key){
     }
 }
 
-void editorSetRow(int row){
+int editorSetRow(int row){
     if(row > E.editors[E.screenNumber].displayLength) row = E.editors[E.screenNumber].displayLength;
     else if(row < 0) row = 0;
     E.editors[E.screenNumber].cy = row;
+    return 0;
 }
 
 void handleCommand(char* s){
@@ -945,42 +945,25 @@ void handleCommand(char* s){
     // first char identifier
     size_t startIndex = 1;
     size_t i = startIndex;
-    std::string str;
+    char* str;
     while(s[i] != '\0'){
         str = str + s[i];
         i++;
     }
+    int lineNumber = atoi(str);
     switch(command){
         case 'l':
-            try{
-                int lineNumber = std::stoi(str);
-                editorSetRow(lineNumber);
-            }
-            catch(const std::exception& e){
+            if(editorSetRow(lineNumber) == -1){
                 editorSetStatusMessage("line number is impossible");
                 return;
             }
             break;
         // move + or - lines
         case '-':
-            try{
-                int lineNumber = std::stoi(str);
-                editorSetRow(E.editors[E.screenNumber].cy - lineNumber);
-            }
-            catch(const std::exception& e){
-                editorSetStatusMessage("line number is impossible");
-                return;
-            }
+            editorSetRow(E.editors[E.screenNumber].cy - lineNumber);
             break;
         case '+':
-            try{
-                int lineNumber = std::stoi(str);
-                editorSetRow(E.editors[E.screenNumber].cy + lineNumber);
-            }
-            catch(const std::exception& e){
-                editorSetStatusMessage("line number is impossible");
-                return;
-            }
+            editorSetRow(E.editors[E.screenNumber].cy + lineNumber);
             break;
     }
 }
@@ -1277,9 +1260,9 @@ void editorDrawStatusBar(struct AppendBuffer *ab){
         E.editors[E.screenNumber].dirty ? "(modified)": "",
         convertModeToString(),
         E.screenNumber,
-        E.editors[E.screenNumber].infoLine.c_str());
+        E.editors[E.screenNumber].infoLine);
     int rlen = snprintf(rStatus, sizeof(rStatus), "%s | %d/%d",
-        E.editors[E.screenNumber].syntax ? E.editors[E.screenNumber].syntax->filetype.c_str() : strdup("No Filetype"), E.editors[E.screenNumber].cy + 1, E.editors[E.screenNumber].displayLength);
+        E.editors[E.screenNumber].syntax ? E.editors[E.screenNumber].syntax->filetype : strdup("No Filetype"), E.editors[E.screenNumber].cy + 1, E.editors[E.screenNumber].displayLength);
     if(length > E.editors[E.screenNumber].screenColumns){
         length = E.editors[E.screenNumber].screenColumns;
     }
