@@ -143,7 +143,7 @@ struct EditorSyntax HighLightDataBase[] = {
     C_HL_extensions,
     C_HL_keywords,
     // temp change fix later # -> //
-    "#", "/*", "*/",
+    "//", "/*", "*/",
     HL_HIGHLIGHT_NUMBERS | HL_HIGHLIGHT_STRINGS},
     
     {"py",
@@ -615,7 +615,7 @@ void editorRowDeleteChar(EditorRow *row, int at){
 /* Editor Functions */
 void editorInsertChar(int c){
     if (E.editors[E.screenNumber].cy == E.editors[E.screenNumber].displayLength){
-        editorInsertRow(E.editors[E.screenNumber].displayLength, strdup(""),0);
+        editorInsertRow(E.editors[E.screenNumber].displayLength, "",0);
     }
     editorRowInsertChar(&E.editors[E.screenNumber].row[E.editors[E.screenNumber].cy], E.editors[E.screenNumber].cx, c);
     E.editors[E.screenNumber].cx++;
@@ -623,7 +623,7 @@ void editorInsertChar(int c){
 
 void editorInsertNewLine(){
     if(E.editors[E.screenNumber].cx == 0){
-        editorInsertRow(E.editors[E.screenNumber].cy, strdup(""), 0);
+        editorInsertRow(E.editors[E.screenNumber].cy, "", 0);
     } else{
         EditorRow *row = &E.editors[E.screenNumber].row[E.editors[E.screenNumber].cy];
         editorInsertRow(E.editors[E.screenNumber].cy + 1, &row->chars[E.editors[E.screenNumber].cx], row->size - E.editors[E.screenNumber].cx);
@@ -688,7 +688,7 @@ void editorOpen(char* filename){
     }
     initScreen(E.screenNumber);
 
-    E.editors[E.screenNumber].fileName = strdup(filename);
+    E.editors[E.screenNumber].fileName = filename;
 
     editorSelectSyntaxHighlight();
 
@@ -718,7 +718,7 @@ void editorOpen(char* filename){
 
 void editorSave(){
     if(E.editors[E.screenNumber].fileName == NULL){
-        E.editors[E.screenNumber].fileName = editorPrompt(strdup("Save as (Esc to cancel): %s"), NULL);
+        E.editors[E.screenNumber].fileName = editorPrompt("Save as (Esc to cancel): %s", NULL);
         if(E.editors[E.screenNumber].fileName == NULL){
             editorSetStatusMessage("Save aborted");
             return;
@@ -809,7 +809,7 @@ void editorFind(){
     int saved_columnOffset = E.editors[E.screenNumber].columnOffset;
     int saved_rowOffset = E.editors[E.screenNumber].rowOffset;
 
-    char* query = editorPrompt(strdup("Search: %s (ESC/Arrows/Enter): "), editorFindCallback);
+    char* query = editorPrompt("Search: %s (ESC/Arrows/Enter): ", editorFindCallback);
     if(query){
         free(query);
     } else {
@@ -1006,10 +1006,10 @@ void editorProcessKeyPress(void){
                 E.editors[E.screenNumber].mode = 'V';
                 break;
             case ':':
-                handleCommand(editorPrompt(strdup(": %s"), NULL));
+                handleCommand(editorPrompt(": %s", NULL));
                 break;
             case 'O':
-                editorOpen(editorPrompt(strdup("Open file: %s"), NULL));
+                editorOpen(editorPrompt("Open file: %s", NULL));
                 break;
 
             case CTRL_KEY('x'):
@@ -1243,11 +1243,11 @@ void editorDrawRows(struct AppendBuffer *ab){
 
 char* convertModeToString(){
     switch (E.editors[E.screenNumber].mode){
-        case 'n': return strdup("normal");
-        case 'i': return strdup("insert");
-        case 'v': return strdup("visual");
-        case 'V': return strdup("visual line");
-        default: return strdup("");
+        case 'n': return "normal";
+        case 'i': return "insert";
+        case 'v': return "visual";
+        case 'V': return "visual line";
+        default: return "";
     }
 }
 
@@ -1265,7 +1265,7 @@ void editorDrawStatusBar(struct AppendBuffer *ab){
         E.screenNumber,
         E.editors[E.screenNumber].infoLine);
     int rlen = snprintf(rStatus, sizeof(rStatus), "%s | %d/%d",
-        E.editors[E.screenNumber].syntax ? E.editors[E.screenNumber].syntax->filetype : strdup("No Filetype"), E.editors[E.screenNumber].cy + 1, E.editors[E.screenNumber].displayLength);
+        E.editors[E.screenNumber].syntax ? E.editors[E.screenNumber].syntax->filetype : "No Filetype", E.editors[E.screenNumber].cy + 1, E.editors[E.screenNumber].displayLength);
     if(length > E.editors[E.screenNumber].screenColumns){
         length = E.editors[E.screenNumber].screenColumns;
     }
