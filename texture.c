@@ -466,6 +466,7 @@ void editorSelectSyntaxHighlight(void){
     for(unsigned int j = 0; j < HighLightDataBase_ENTRIES; j++){
         struct EditorSyntax *s = &HighLightDataBase[j];
         unsigned int i = 0;
+        //s->fileMath[i][0] != '\0'
         while(s->fileMatch[i] != ""){
             int is_extension = (s->fileMatch[i][0] == '0');
             if((is_extension && extension && !strcmp(extension, s->fileMatch[i])) ||
@@ -878,6 +879,10 @@ char *editorPrompt(char *prompt, void (*callback)(char *, int)){
             if(bufferLength == bufferSize - 1){
                 bufferSize *= 2;
                 buffer = (char *)realloc(buffer, bufferSize);
+                if(buffer == NULL){
+                    free(buffer);
+                    terminate("realloc error");
+                }
             }
             buffer[bufferLength++] = c;
             buffer[bufferLength] = '\0';
@@ -939,13 +944,13 @@ int editorSetRow(int row){
     return 0;
 }
 
-void handleCommand(char* s){
+void handleCommand(const char* s){
     char command = s[0];
     printf("%c",command);
     // first char identifier
     size_t startIndex = 1;
     size_t i = startIndex;
-    char* str;
+    char* str = "";
     while(s[i] != '\0'){
         str = str + s[i];
         i++;
@@ -1199,8 +1204,6 @@ void editorDrawRows(struct AppendBuffer *ab){
                 unsigned char *highLight = &E.editors[E.screenNumber].row[fileRow].highLight[E.editors[E.screenNumber].columnOffset];
                 int current_color = -1;
                 int j;
-                // std::string LineString = "" + std::to_string(fileRow) + "| ";
-                // abAppend(ab, LineString.c_str(), LineString.length());
                 for(j = 0; j < length; j++){
                     if(iscntrl(c[j])){
                         char sym = (c[j] <= 26) ? '@' + c[j] : '?';
